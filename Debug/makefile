@@ -52,6 +52,12 @@ default.size.stdout \
 OBJDUMP_LIST += \
 STM32H7xx_QSPI.list \
 
+OBJCOPY_HEX += \
+STM32H7xx_QSPI.hex \
+
+OBJCOPY_BIN += \
+STM32H7xx_QSPI.bin \
+
 
 # All Target
 all: main-build
@@ -75,12 +81,22 @@ STM32H7xx_QSPI.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
+STM32H7xx_QSPI.hex: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objcopy  -O ihex $(EXECUTABLES) "STM32H7xx_QSPI.hex"
+	@echo 'Finished building: $@'
+	@echo ' '
+
+STM32H7xx_QSPI.bin: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objcopy  -O binary $(EXECUTABLES) "STM32H7xx_QSPI.bin"
+	@echo 'Finished building: $@'
+	@echo ' '
+
 # Other Targets
 clean:
-	-$(RM) STM32H7xx_QSPI.elf STM32H7xx_QSPI.list STM32H7xx_QSPI.map default.size.stdout
+	-$(RM) STM32H7xx_QSPI.bin STM32H7xx_QSPI.elf STM32H7xx_QSPI.hex STM32H7xx_QSPI.list STM32H7xx_QSPI.map default.size.stdout
 	-@echo ' '
 
-secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST)
+secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST) $(OBJCOPY_HEX) $(OBJCOPY_BIN)
 
 fail-specified-linker-script-missing:
 	@echo 'Error: Cannot find the specified linker script. Check the linker settings in the build configuration.'
