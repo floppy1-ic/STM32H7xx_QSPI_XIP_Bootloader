@@ -21,6 +21,10 @@ static uint8_t s_char_h = 16;
 static uint16_t s_cur_x;
 static uint16_t s_cur_y;
 
+static uint16_t s_dyn_x;
+static uint16_t s_dyn_y;
+static uint8_t s_dyn_armed;
+
 static uint8_t s_bl_percent = 100;
 
 static void mcal_refresh_metrics(void)
@@ -136,6 +140,7 @@ void lcd_clear(void)
 
   s_cur_x = 0;
   s_cur_y = 0;
+  s_dyn_armed = 0U;
 }
 
 void lcd_print_char(char c)
@@ -316,6 +321,46 @@ void lcd_stm32h7_char(char ch)
 void lcd_stm32h7_message(const char *msg)
 {
   lcd_print_message(msg);
+}
+
+void lcd_stm32h7_dynamic_update(const char *msg)
+{
+  const char *p;
+  uint32_t nchars;
+  uint32_t w;
+
+  if ((msg == NULL) || (s_screen_w == 0U) || (s_screen_h == 0U))
+  {
+    return;
+  }
+
+  if ((s_dyn_armed == 0U) || (s_cur_y != s_dyn_y))
+  {
+    s_dyn_x = s_cur_x;
+    s_dyn_y = s_cur_y;
+    s_dyn_armed = 1U;
+  }
+
+  if (s_dyn_x >= s_screen_w)
+  {
+    return;
+  }
+
+  w = s_screen_w - (uint32_t)s_dyn_x;
+  ST7735_LCD_Driver.FillRect(&st7735_pObj, s_dyn_x, s_dyn_y, w, (uint32_t)s_char_h, s_bg);
+  (void)LCD_ShowString(s_dyn_x, s_dyn_y, (uint16_t)w, s_char_h, s_font_px, (uint8_t *)msg);
+
+  nchars = 0U;
+  for (p = msg; *p != '\0'; p++)
+  {
+    nchars++;
+  }
+  s_cur_x = (uint16_t)(s_dyn_x + (uint16_t)(nchars * (uint32_t)s_char_w));
+  if (s_cur_x >= s_screen_w)
+  {
+    s_cur_x = (uint16_t)((s_screen_w > (uint32_t)s_char_w) ? (s_screen_w - (uint32_t)s_char_w) : 0U);
+  }
+  s_cur_y = s_dyn_y;
 }
 
 void lcd_stm32h7_clear(void)
