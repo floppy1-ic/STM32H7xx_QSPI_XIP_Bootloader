@@ -1,0 +1,14 @@
+../QSPI_Flash/Src/qspi_flash.c:24:26:QSPI_Flash_Init	24	static
+../QSPI_Flash/Src/qspi_flash.c:53:26:QSPI_Flash_Reset	72	static
+../QSPI_Flash/Src/qspi_flash.c:101:26:QSPI_Flash_ReadID	80	static
+../QSPI_Flash/Src/qspi_flash.c:137:26:QSPI_Flash_EraseSector	80	static
+../QSPI_Flash/Src/qspi_flash.c:173:26:QSPI_Flash_EraseBlock32K	80	static
+../QSPI_Flash/Src/qspi_flash.c:209:26:QSPI_Flash_EraseBlock64K	80	static
+../QSPI_Flash/Src/qspi_flash.c:245:26:QSPI_Flash_EraseChip	80	static
+../QSPI_Flash/Src/qspi_flash.c:279:26:QSPI_Flash_WritePage	88	static
+../QSPI_Flash/Src/qspi_flash.c:331:26:QSPI_Flash_Write	48	static
+../QSPI_Flash/Src/qspi_flash.c:364:26:QSPI_Flash_Read	88	static
+../QSPI_Flash/Src/qspi_flash.c:400:26:QSPI_Flash_EnableMemoryMappedMode	80	static
+../QSPI_Flash/Src/qspi_flash.c:433:33:QSPI_Flash_WriteEnable	104	static
+../QSPI_Flash/Src/qspi_flash.c:469:33:QSPI_Flash_AutoPollingMemReady	96	static
+../QSPI_Flash/Src/qspi_flash.c:495:33:QSPI_Flash_HALToStatus	16	static
