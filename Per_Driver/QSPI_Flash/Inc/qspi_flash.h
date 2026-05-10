@@ -27,7 +27,9 @@ extern "C" {
 #include "stm32h7xx_hal.h"
 
 /* W25Q64 memory geometry ---------------------------------------------------- */
-#define W25Q64_FLASH_SIZE              0x800000U   /* 8 MBytes / 64 Mbits */
+#define W25Q64_FLASH_SIZE              0x800000U   /* 8 MiB (64 Mbit; 1 byte = 8 bits → 64/8 = 8) */
+#define W25Q64_FLASH_SIZE_MBYTE        (W25Q64_FLASH_SIZE / (1024U * 1024U)) /* 8 */
+#define W25Q64_FLASH_SIZE_MBIT         (W25Q64_FLASH_SIZE_MBYTE * 8U)       /* 64 */
 #define W25Q64_SECTOR_SIZE             0x1000U     /* 4 KBytes            */
 #define W25Q64_BLOCK_32K_SIZE          0x8000U     /* 32 KBytes           */
 #define W25Q64_BLOCK_64K_SIZE          0x10000U    /* 64 KBytes           */
@@ -109,6 +111,25 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_Reset(QSPI_HandleTypeDef *hqspi);
   * @retval QSPI_Flash_StatusTypeDef QSPI_FLASH_OK on success, error code otherwise.
   */
 QSPI_Flash_StatusTypeDef QSPI_Flash_ReadID(QSPI_HandleTypeDef *hqspi, uint8_t *pID);
+
+/**
+  * @brief  Read JEDEC ID (0x9F) and compute capacity for standard SPI NOR parts.
+  *         Density byte (3rd byte) is decoded as size_bytes = 2^N (JEDEC-style; Winbond W25Q, etc.).
+  *         W25Q64: N=23 → 8 MiB, 64 Mibit (64 Mibit ÷ 8 = 8 MiB).
+  * @param  hqspi      Initialized QSPI handle.
+  * @param  pSizeMByte Whole mebibytes: size_bytes / (1024²); 0 if capacity < 1 MiB.
+  * @param  pSizeMbit  Mebibits: (size_bytes × 8) / (1024²) (e.g. 64 for W25Q64).
+  * @retval QSPI_Flash_StatusTypeDef QSPI_FLASH_OK, or QSPI_FLASH_ERROR (NULL ptr / bad density / bus error).
+  */
+QSPI_Flash_StatusTypeDef QSPI_Flash_GetSize(QSPI_HandleTypeDef *hqspi, uint32_t *pSizeMByte, uint32_t *pSizeMbit);
+
+/**
+  * @brief  Read 3-byte JEDEC ID (Manufacturer, Memory Type, Capacity) using command 0x9F.
+  * @param  hqspi   Initialized QSPI handle.
+  * @param  pJedec  Buffer for 3 bytes: [0]=Manufacturer, [1]=Type, [2]=density code (2^N bytes).
+  * @retval QSPI_Flash_StatusTypeDef QSPI_FLASH_OK on success.
+  */
+QSPI_Flash_StatusTypeDef QSPI_Flash_ReadJEDEC(QSPI_HandleTypeDef *hqspi, uint8_t *pJedec);
 
 /**
   * @brief  Erase a single 4 KB sector containing the given address.

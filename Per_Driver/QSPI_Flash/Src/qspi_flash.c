@@ -10,6 +10,7 @@
   */
 
 #include "qspi_flash.h"
+#include <stdint.h>
 
 #define QSPI_FLASH_DEFAULT_TIMEOUT       HAL_QSPI_TIMEOUT_DEFAULT_VALUE
 #define QSPI_FLASH_PROGRAM_TIMEOUT       1000U
@@ -20,6 +21,7 @@
 static QSPI_Flash_StatusTypeDef QSPI_Flash_WriteEnable(QSPI_HandleTypeDef *hqspi);
 static QSPI_Flash_StatusTypeDef QSPI_Flash_AutoPollingMemReady(QSPI_HandleTypeDef *hqspi, uint32_t Timeout);
 static QSPI_Flash_StatusTypeDef QSPI_Flash_HALToStatus(HAL_StatusTypeDef halStatus);
+static QSPI_Flash_StatusTypeDef QSPI_Flash_BytesFromJedecDensity(uint8_t density, uint32_t *pSizeBytes);
 
 /* ========================================================================== */
 /* Public API                                                                  */
@@ -143,6 +145,80 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_ReadID(QSPI_HandleTypeDef *hqspi, uint8_t *p
   return QSPI_Flash_HALToStatus(HAL_QSPI_Receive(hqspi, pID, QSPI_FLASH_DEFAULT_TIMEOUT));
 }
 /* Function end: QSPI_Flash_ReadID ----------------------------------------- */
+
+/* Function start: QSPI_Flash_ReadJEDEC -------------------------------------- */
+QSPI_Flash_StatusTypeDef QSPI_Flash_ReadJEDEC(QSPI_HandleTypeDef *hqspi, uint8_t *pJedec)
+{
+  QSPI_CommandTypeDef cmd = {0};
+  HAL_StatusTypeDef status;
+
+  if ((hqspi == NULL) || (pJedec == NULL))
+  {
+    return QSPI_FLASH_ERROR;
+  }
+
+  cmd.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
+  cmd.Instruction       = W25Q64_CMD_JEDEC_ID;
+  cmd.AddressMode       = QSPI_ADDRESS_NONE;
+  cmd.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
+  cmd.DataMode          = QSPI_DATA_1_LINE;
+  cmd.NbData            = 3U;
+  cmd.DummyCycles       = 0U;
+  cmd.DdrMode           = QSPI_DDR_MODE_DISABLE;
+  cmd.DdrHoldHalfCycle  = QSPI_DDR_HHC_ANALOG_DELAY;
+  cmd.SIOOMode          = QSPI_SIOO_INST_EVERY_CMD;
+
+  status = HAL_QSPI_Command(hqspi, &cmd, QSPI_FLASH_DEFAULT_TIMEOUT);
+  if (status != HAL_OK)
+  {
+    return QSPI_Flash_HALToStatus(status);
+  }
+
+  return QSPI_Flash_HALToStatus(HAL_QSPI_Receive(hqspi, pJedec, QSPI_FLASH_DEFAULT_TIMEOUT));
+}
+/* Function end: QSPI_Flash_ReadJEDEC --------------------------------------- */
+
+/* Function start: QSPI_Flash_BytesFromJedecDensity (static) ---------------- */
+static QSPI_Flash_StatusTypeDef QSPI_Flash_BytesFromJedecDensity(uint8_t density, uint32_t *pSizeBytes)
+{
+  /* Standard SPI NOR: capacity = 2^density bytes (Winbond W25Q table, many JEDEC NOR parts). */
+  if ((pSizeBytes == NULL) || (density == 0U) || (density > 31U))
+  {
+    return QSPI_FLASH_ERROR;
+  }
+
+  *pSizeBytes = (1UL << density);
+  return QSPI_FLASH_OK;
+}
+/* Function end: QSPI_Flash_BytesFromJedecDensity ---------------------------- */
+
+/* Function start: QSPI_Flash_GetSize ---------------------------------------- */
+QSPI_Flash_StatusTypeDef QSPI_Flash_GetSize(QSPI_HandleTypeDef *hqspi, uint32_t *pSizeMByte, uint32_t *pSizeMbit)
+{
+  uint8_t jedec[3] = {0U};
+  uint32_t size_bytes;
+
+  if ((hqspi == NULL) || (pSizeMByte == NULL) || (pSizeMbit == NULL))
+  {
+    return QSPI_FLASH_ERROR;
+  }
+
+  if (QSPI_Flash_ReadJEDEC(hqspi, jedec) != QSPI_FLASH_OK)
+  {
+    return QSPI_FLASH_ERROR;
+  }
+
+  if (QSPI_Flash_BytesFromJedecDensity(jedec[2], &size_bytes) != QSPI_FLASH_OK)
+  {
+    return QSPI_FLASH_ERROR;
+  }
+
+  *pSizeMByte = size_bytes / (1024U * 1024U);
+  /* Avoid uint32 overflow on size_bytes * 8 for the largest densities. */
+  *pSizeMbit  = (uint32_t)(((uint64_t)size_bytes * 8ULL) / (1024ULL * 1024ULL));
+  return QSPI_FLASH_OK;
+}
+/* Function end: QSPI_Flash_GetSize ------------------------------------------ */
 
 /* Function start: QSPI_Flash_EraseSector ---------------------------------- */
 QSPI_Flash_StatusTypeDef QSPI_Flash_EraseSector(QSPI_HandleTypeDef *hqspi, uint32_t SectorAddress)
