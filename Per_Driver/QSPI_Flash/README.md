@@ -17,18 +17,21 @@ QSPI_Flash/
 
 The board routes the W25Q64 to QSPI BK1 with the following fixed nets:
 
-| Signal              | MCU pin | Alternate function | GPIO speed       |
-|---------------------|---------|--------------------|------------------|
-| `QUADSPI_CLK`       | **PB2** | `GPIO_AF9_QUADSPI`  | `VERY_HIGH` |
-| `QUADSPI_BK1_NCS`   | **PB6** | `GPIO_AF10_QUADSPI` | `VERY_HIGH` |
-| `QUADSPI_BK1_IO0`   | **PD11**| `GPIO_AF9_QUADSPI`  | `VERY_HIGH` |
-| `QUADSPI_BK1_IO1`   | **PD12**| `GPIO_AF9_QUADSPI`  | `VERY_HIGH` |
-| `QUADSPI_BK1_IO2`   | **PE2** | `GPIO_AF9_QUADSPI`  | `VERY_HIGH` |
-| `QUADSPI_BK1_IO3`   | **PD13**| `GPIO_AF9_QUADSPI`  | `VERY_HIGH` |
+| Signal              | MCU pin | CubeMX User Label | Alternate function   | GPIO speed   |
+|---------------------|---------|-------------------|----------------------|--------------|
+| `QUADSPI_CLK`       | **PB2** | _(none)_          | `GPIO_AF9_QUADSPI`   | `VERY_HIGH`  |
+| `QUADSPI_BK1_NCS`   | **PB6** | _(none, locked)_  | `GPIO_AF10_QUADSPI`  | `VERY_HIGH`  |
+| `QUADSPI_BK1_IO0`   | **PD11**| _(none)_          | `GPIO_AF9_QUADSPI`   | `VERY_HIGH`  |
+| `QUADSPI_BK1_IO1`   | **PD12**| _(none)_          | `GPIO_AF9_QUADSPI`   | `VERY_HIGH`  |
+| `QUADSPI_BK1_IO2`   | **PE2** | _(none)_          | `GPIO_AF9_QUADSPI`   | `VERY_HIGH`  |
+| `QUADSPI_BK1_IO3`   | **PD13**| _(none, locked)_  | `GPIO_AF9_QUADSPI`   | `VERY_HIGH`  |
 
 > **Why PB6 uses AF10 while every other pin uses AF9:**
 > On STM32H750, `QUADSPI_BK1_NCS` is exposed on AF9 for `PB10` and on **AF10 for `PB6`**.
 > CubeMX picks the correct AF automatically. Do not change it manually.
+
+> Pins for `PB6` and `PD13` are kept *Locked* in the `.ioc` so a careless re-pinout cannot
+> drift them back to the CubeMX defaults (`PB10` / `PA1`) which do not match this board.
 
 ### Pin pitfalls (and why we hit them)
 CubeMX's *default* pinmux for QSPI BK1 selects `PB10` for `NCS` and `PA1` for `IO3`, which
@@ -178,59 +181,56 @@ if (QSPI_Flash_ReadID(&hqspi, jedecId) != QSPI_FLASH_OK) Error_Handler();
 
 ---
 
-## 7) SPI4 for TFT LCD (e.g. ST7735)
+## 7) SPI4 + TIM1 for the on-board TFT LCD
 
-Many MiniSTM32H750 builds drive a small SPI TFT over **SPI4**. CubeMX generates `MX_SPI4_Init()`; keep **software NSS** so you can bit-bang `CS`/`DC`/`RST` in your display layer. The ST7735 family is sensitive to very fast SCK, so a **conservative baud prescaler** (here `÷16`) is a reliable starting point before tuning for your wiring and panel.
+The MiniSTM32H750 carries an SPI TFT (ST7735 family) driven from **SPI4** for the data
+bus and **TIM1_CH2N** for the backlight PWM. The driver under
+`Per_Driver/SPI4_LCD/` accesses these through the CubeMX-generated handles
+`hspi4` and `htim1`, plus two GPIO outputs for `CS` and `DC/RS`.
 
-Basic init (paste into `spi.c` user sections or match in CubeMX *Parameter Settings*):
+### 7.1) LCD pin map (must match CubeMX `.ioc`)
+
+| Signal               | MCU pin  | CubeMX User Label  | Mode / Alternate function       | GPIO speed   | Where used                                                |
+|----------------------|----------|--------------------|----------------------------------|--------------|------------------------------------------------------------|
+| `SPI4_MISO`          | **PE5**  | _(none)_           | AF mode, `GPIO_AF5_SPI4`         | `VERY_HIGH`  | LCD doesn't read, but kept for full-duplex routing         |
+| `SPI4_SCK`           | **PE12** | _(none)_           | AF mode, `GPIO_AF5_SPI4`         | `VERY_HIGH`  | TFT serial clock                                           |
+| `SPI4_MOSI`          | **PE14** | _(none)_           | AF mode, `GPIO_AF5_SPI4`         | `VERY_HIGH`  | TFT serial data (SDA / SDI)                                |
+| `TIM1_CH2N`          | **PE10** | _(none, locked)_   | AF mode, `GPIO_AF1_TIM1` (PWM)   | `LOW`        | Backlight FET driven by `HAL_TIMEx_PWMN_Start` on CH2      |
+| `LCD_CS`             | **PE11** | **`LCD_CS`**       | `GPIO_Output`                    | `LOW`        | `LCD_CS_Pin` / `LCD_CS_GPIO_Port` macros (auto-generated)  |
+| `LCD_WR_RS` (DC)     | **PE13** | **`LCD_WR_RS`**    | `GPIO_Output`                    | `LOW`        | `LCD_WR_RS_Pin` / `LCD_WR_RS_GPIO_Port` (auto-generated)   |
+| LCD `RESET`          | n/a      | n/a                | not driven by MCU                | n/a          | `LCD_RST_SET`/`LCD_RST_RESET` macros are intentionally empty in `lcd_app.c` |
+| Heartbeat LED        | **PE3**  | _(none)_           | `GPIO_Output`                    | `LOW`        | Toggled in `main.c` `while(1)`                             |
+
+> **The User Label matters.** CubeMX auto-generates macros from the User Label, so
+> `LCD_CS` → `LCD_CS_Pin` / `LCD_CS_GPIO_Port` and `LCD_WR_RS` → `LCD_WR_RS_Pin` /
+> `LCD_WR_RS_GPIO_Port`. The LCD driver in `Per_Driver/SPI4_LCD/Src/lcd_app.c` references
+> exactly those names; renaming the label breaks the build.
+
+### 7.2) SPI4 / TIM1 peripheral configuration
+
+| Peripheral | Field                       | Value                          | Notes                                   |
+|------------|-----------------------------|--------------------------------|-----------------------------------------|
+| SPI4       | `Mode`                      | `SPI_MODE_MASTER`              | MCU is master                           |
+| SPI4       | `Direction`                 | `SPI_DIRECTION_2LINES`         | Full-duplex (MISO unused but routed)    |
+| SPI4       | `DataSize`                  | `SPI_DATASIZE_8BIT`            | Standard ST7735 framing                 |
+| SPI4       | `NSS`                       | `SPI_NSS_SOFT`                 | CS handled by `LCD_CS` GPIO, not SPI HW |
+| SPI4       | `BaudRatePrescaler`         | `÷16` (CubeMX default)         | ≈ 60 Mbit/s @ 240 MHz HCLK; lower if you see corruption |
+| SPI4       | `CLKPolarity` / `CLKPhase`  | `LOW` / `1EDGE`                | ST7735 mode 0                           |
+| SPI4 clock | `Spi45ClockSelection`       | `RCC_SPI45CLKSOURCE_D2PCLK1`   | Driven by APB1 (D2) per `.ioc` defaults |
+| TIM1       | `Channel-PWM Generation2`   | `TIM_CHANNEL_2` CH2N           | Drives backlight via complementary out  |
+| TIM1       | `ARR` (period)              | `65535` (full 16-bit)          | `LCD_SetBrightness` writes raw compare  |
+| TIM1       | Start API                   | `HAL_TIMEx_PWMN_Start(...)`    | **Note `PWMN`, not `PWM`** for CH2N     |
+
+### 7.3) Quick LCD bring-up (already wired into `main.c`)
 
 ```c
-static void MX_SPI4_Init(void)
-{
+#include "lcd_mcal.h"
 
-  /* USER CODE BEGIN SPI4_Init 0 */
-
-  /* USER CODE END SPI4_Init 0 */
-
-  /* USER CODE BEGIN SPI4_Init 1 */
-
-  /* USER CODE END SPI4_Init 1 */
-  /* SPI4 parameter configuration*/
-  hspi4.Instance = SPI4;
-  hspi4.Init.Mode = SPI_MODE_MASTER;
-  hspi4.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi4.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi4.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi4.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi4.Init.NSS = SPI_NSS_SOFT;
-  /* ST7735 is sensitive to very high SPI clock; keep a conservative rate. */
-  hspi4.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
-  hspi4.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi4.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi4.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi4.Init.CRCPolynomial = 0x0;
-  hspi4.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
-  hspi4.Init.NSSPolarity = SPI_NSS_POLARITY_LOW;
-  hspi4.Init.FifoThreshold = SPI_FIFO_THRESHOLD_01DATA;
-  hspi4.Init.TxCRCInitializationPattern = SPI_CRC_INITIALIZATION_ALL_ZERO_PATTERN;
-  hspi4.Init.RxCRCInitializationPattern = SPI_CRC_INITIALIZATION_ALL_ZERO_PATTERN;
-  hspi4.Init.MasterSSIdleness = SPI_MASTER_SS_IDLENESS_00CYCLE;
-  hspi4.Init.MasterInterDataIdleness = SPI_MASTER_INTERDATA_IDLENESS_00CYCLE;
-  hspi4.Init.MasterReceiverAutoSusp = SPI_MASTER_RX_AUTOSUSP_DISABLE;
-  hspi4.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_DISABLE;
-  hspi4.Init.IOSwap = SPI_IO_SWAP_DISABLE;
-  if (HAL_SPI_Init(&hspi4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN SPI4_Init 2 */
-
-  /* USER CODE END SPI4_Init 2 */
-
-}
+lcd_stm32h7_init();           /* SPI4 + TIM1 PWM + ST7735 init    */
+lcd_stm32h7_backlight(100);   /* 0..100%, mapped to TIM1 compare  */
+lcd_stm32h7_clear();
+lcd_stm32h7_message("Hello World");
 ```
-
-After this, call `MX_SPI4_Init()` from your startup path (same style as other peripherals) and use `HAL_SPI_Transmit()` / `HAL_SPI_TransmitReceive()` from your LCD driver with explicit CS/DC control.
 
 ---
 
@@ -253,3 +253,5 @@ After this, call `MX_SPI4_Init()` from your startup path (same style as other pe
 | BSP pass 1   | `0x90` ReadID, dual reset path (4-line + 1-line), relaxed `0xEF` check    |
 | Pinmap fix   | `NCS` moved `PB10` → `PB6`; `IO3` moved `PA1` → `PD13`; all GPIO `VERY_HIGH` |
 | Clean-up     | Removed `SetLowSpeed`/`SetHighSpeed`; rely on CubeMX prescaler            |
+| LCD pinmap   | `SPI4_MOSI` `PE6` → `PE14`; `TIM1_CH2N` `PB0` → `PE10`; added `LCD_CS=PE11`, `LCD_WR_RS=PE13` (User Labels in CubeMX) |
+| Doc refresh  | Added User Label / AF / Speed columns for QSPI and LCD pin maps          |
