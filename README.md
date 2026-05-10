@@ -13,18 +13,47 @@ QSPI_Flash/
 
 ---
 
+## Hardware summary (QSPI flash + TFT LCD)
+
+### QSPI — Winbond W25Q64
+
+| Item | Value |
+|------|--------|
+| **MCU** | STM32H750VBTx |
+| **Peripheral** | QUADSPI (BK1, single flash) |
+| **Flash IC** | **Winbond W25Q64** (8 MByte external NOR) |
+
+| QSPI signal | MCU pin | CubeMX User Label | Alternate function | GPIO max speed |
+|-------------|---------|-------------------|--------------------|----------------|
+| `QUADSPI_CLK` | **PB2** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
+| `QUADSPI_BK1_NCS` | **PB6** | _(none, locked)_ | `GPIO_AF10_QUADSPI` | `VERY_HIGH` |
+| `QUADSPI_BK1_IO0` | **PD11** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
+| `QUADSPI_BK1_IO1` | **PD12** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
+| `QUADSPI_BK1_IO2` | **PE2** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
+| `QUADSPI_BK1_IO3` | **PD13** | _(none, locked)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
+
+### TFT LCD — ST7735 (SPI4)
+
+| Item | Value |
+|------|--------|
+| **Panel / controller** | **ST7735** family (SPI RGB TFT) |
+| **MCU data bus** | **SPI4** (8-bit, software NSS; CS/DC on GPIO) |
+| **Backlight** | **TIM1** channel 2 complementary output (**TIM1_CH2N** on **PE10**) |
+
+| LCD / bus signal | MCU pin | CubeMX User Label | Mode / alternate function | GPIO max speed |
+|------------------|---------|-------------------|---------------------------|----------------|
+| `SPI4_MISO` | **PE5** | _(none)_ | `GPIO_AF5_SPI4` | `VERY_HIGH` |
+| `SPI4_SCK` | **PE12** | _(none)_ | `GPIO_AF5_SPI4` | `VERY_HIGH` |
+| `SPI4_MOSI` | **PE14** | _(none)_ | `GPIO_AF5_SPI4` | `VERY_HIGH` |
+| LCD chip select (CS) | **PE11** | **`LCD_CS`** | `GPIO_Output` | `LOW` |
+| Data / command (DC, RS) | **PE13** | **`LCD_WR_RS`** | `GPIO_Output` | `LOW` |
+| Backlight PWM | **PE10** | _(none, locked)_ | `GPIO_AF1_TIM1` (TIM1_CH2N) | `LOW` |
+
+---
+
 ## 1) Pin map (must match CubeMX `.ioc`)
 
-The board routes the W25Q64 to QSPI BK1 with the following fixed nets:
-
-| Signal              | MCU pin | CubeMX User Label | Alternate function   | GPIO speed   |
-|---------------------|---------|-------------------|----------------------|--------------|
-| `QUADSPI_CLK`       | **PB2** | _(none)_          | `GPIO_AF9_QUADSPI`   | `VERY_HIGH`  |
-| `QUADSPI_BK1_NCS`   | **PB6** | _(none, locked)_  | `GPIO_AF10_QUADSPI`  | `VERY_HIGH`  |
-| `QUADSPI_BK1_IO0`   | **PD11**| _(none)_          | `GPIO_AF9_QUADSPI`   | `VERY_HIGH`  |
-| `QUADSPI_BK1_IO1`   | **PD12**| _(none)_          | `GPIO_AF9_QUADSPI`   | `VERY_HIGH`  |
-| `QUADSPI_BK1_IO2`   | **PE2** | _(none)_          | `GPIO_AF9_QUADSPI`   | `VERY_HIGH`  |
-| `QUADSPI_BK1_IO3`   | **PD13**| _(none, locked)_  | `GPIO_AF9_QUADSPI`   | `VERY_HIGH`  |
+The W25Q64 QSPI pinout is summarized in **Hardware summary → QSPI — Winbond W25Q64** above. Board-specific notes:
 
 > **Why PB6 uses AF10 while every other pin uses AF9:**
 > On STM32H750, `QUADSPI_BK1_NCS` is exposed on AF9 for `PB10` and on **AF10 for `PB6`**.
@@ -190,16 +219,12 @@ bus and **TIM1_CH2N** for the backlight PWM. The driver under
 
 ### 7.1) LCD pin map (must match CubeMX `.ioc`)
 
-| Signal               | MCU pin  | CubeMX User Label  | Mode / Alternate function       | GPIO speed   | Where used                                                |
-|----------------------|----------|--------------------|----------------------------------|--------------|------------------------------------------------------------|
-| `SPI4_MISO`          | **PE5**  | _(none)_           | AF mode, `GPIO_AF5_SPI4`         | `VERY_HIGH`  | LCD doesn't read, but kept for full-duplex routing         |
-| `SPI4_SCK`           | **PE12** | _(none)_           | AF mode, `GPIO_AF5_SPI4`         | `VERY_HIGH`  | TFT serial clock                                           |
-| `SPI4_MOSI`          | **PE14** | _(none)_           | AF mode, `GPIO_AF5_SPI4`         | `VERY_HIGH`  | TFT serial data (SDA / SDI)                                |
-| `TIM1_CH2N`          | **PE10** | _(none, locked)_   | AF mode, `GPIO_AF1_TIM1` (PWM)   | `LOW`        | Backlight FET driven by `HAL_TIMEx_PWMN_Start` on CH2      |
-| `LCD_CS`             | **PE11** | **`LCD_CS`**       | `GPIO_Output`                    | `LOW`        | `LCD_CS_Pin` / `LCD_CS_GPIO_Port` macros (auto-generated)  |
-| `LCD_WR_RS` (DC)     | **PE13** | **`LCD_WR_RS`**    | `GPIO_Output`                    | `LOW`        | `LCD_WR_RS_Pin` / `LCD_WR_RS_GPIO_Port` (auto-generated)   |
-| LCD `RESET`          | n/a      | n/a                | not driven by MCU                | n/a          | `LCD_RST_SET`/`LCD_RST_RESET` macros are intentionally empty in `lcd_app.c` |
-| Heartbeat LED        | **PE3**  | _(none)_           | `GPIO_Output`                    | `LOW`        | Toggled in `main.c` `while(1)`                             |
+SPI / backlight GPIO lines are listed in **Hardware summary → TFT LCD — ST7735 (SPI4)** above. Extra nets used by the app:
+
+| Signal            | MCU pin | CubeMX User Label | Notes |
+|-------------------|---------|-------------------|--------|
+| LCD `RESET`       | n/a     | n/a               | Not driven by MCU; `LCD_RST_SET` / `LCD_RST_RESET` in `lcd_app.c` are intentionally empty |
+| Heartbeat LED     | **PE3** | _(none)_          | `GPIO_Output`, `LOW` speed; toggled in `main.c` `while(1)` |
 
 > **The User Label matters.** CubeMX auto-generates macros from the User Label, so
 > `LCD_CS` → `LCD_CS_Pin` / `LCD_CS_GPIO_Port` and `LCD_WR_RS` → `LCD_WR_RS_Pin` /
@@ -255,3 +280,4 @@ lcd_stm32h7_message("Hello World");
 | Clean-up     | Removed `SetLowSpeed`/`SetHighSpeed`; rely on CubeMX prescaler            |
 | LCD pinmap   | `SPI4_MOSI` `PE6` → `PE14`; `TIM1_CH2N` `PB0` → `PE10`; added `LCD_CS=PE11`, `LCD_WR_RS=PE13` (User Labels in CubeMX) |
 | Doc refresh  | Added User Label / AF / Speed columns for QSPI and LCD pin maps          |
+| Doc refresh  | Top **Hardware summary** tables: QSPI + W25Q64 header/pins, then ST7735 / SPI4 + pins |
