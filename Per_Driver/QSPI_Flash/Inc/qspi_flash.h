@@ -200,6 +200,15 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_Read(QSPI_HandleTypeDef *hqspi, uint32_t Add
   */
 QSPI_Flash_StatusTypeDef QSPI_Flash_EnableMemoryMappedMode(QSPI_HandleTypeDef *hqspi);
 
+/**
+  * @brief  Leave memory-mapped mode and return QSPI to indirect (command) mode.
+  *         Required before erase/program or QSPI_Flash_Read indirect transfers if
+  *         QSPI_Flash_EnableMemoryMappedMode was used. Wraps HAL_QSPI_Abort.
+  * @param  hqspi Pointer to the initialized QSPI handle.
+  * @retval QSPI_Flash_StatusTypeDef QSPI_FLASH_OK on success, error code otherwise.
+  */
+QSPI_Flash_StatusTypeDef QSPI_Flash_DisableMemoryMappedMode(QSPI_HandleTypeDef *hqspi);
+
 #ifdef __cplusplus
 }
 #endif

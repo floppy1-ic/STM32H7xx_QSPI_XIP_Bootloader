@@ -528,6 +528,18 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_EnableMemoryMappedMode(QSPI_HandleTypeDef *h
 }
 /* Function end: QSPI_Flash_EnableMemoryMappedMode ------------------------- */
 
+/* Function start: QSPI_Flash_DisableMemoryMappedMode ---------------------- */
+QSPI_Flash_StatusTypeDef QSPI_Flash_DisableMemoryMappedMode(QSPI_HandleTypeDef *hqspi)
+{
+  if (hqspi == NULL)
+  {
+    return QSPI_FLASH_ERROR;
+  }
+
+  return QSPI_Flash_HALToStatus(HAL_QSPI_Abort(hqspi));
+}
+/* Function end: QSPI_Flash_DisableMemoryMappedMode ------------------------ */
+
 /* ========================================================================== */
 /* Static helpers                                                              */
 /* ========================================================================== */
