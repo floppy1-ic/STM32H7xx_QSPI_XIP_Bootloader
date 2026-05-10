@@ -12,6 +12,7 @@
 ../Per_Driver/QSPI_Flash/Src/qspi_flash.c:428:26:QSPI_Flash_Write	7
 ../Per_Driver/QSPI_Flash/Src/qspi_flash.c:463:26:QSPI_Flash_Read	6
 ../Per_Driver/QSPI_Flash/Src/qspi_flash.c:501:26:QSPI_Flash_EnableMemoryMappedMode	2
-../Per_Driver/QSPI_Flash/Src/qspi_flash.c:536:33:QSPI_Flash_WriteEnable	2
-../Per_Driver/QSPI_Flash/Src/qspi_flash.c:574:33:QSPI_Flash_AutoPollingMemReady	1
-../Per_Driver/QSPI_Flash/Src/qspi_flash.c:602:33:QSPI_Flash_HALToStatus	5
+../Per_Driver/QSPI_Flash/Src/qspi_flash.c:532:26:QSPI_Flash_DisableMemoryMappedMode	2
+../Per_Driver/QSPI_Flash/Src/qspi_flash.c:548:33:QSPI_Flash_WriteEnable	2
+../Per_Driver/QSPI_Flash/Src/qspi_flash.c:586:33:QSPI_Flash_AutoPollingMemReady	1
+../Per_Driver/QSPI_Flash/Src/qspi_flash.c:614:33:QSPI_Flash_HALToStatus	5

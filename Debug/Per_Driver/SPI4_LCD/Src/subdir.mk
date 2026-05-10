@@ -10,7 +10,8 @@ C_SRCS += \
 ../Per_Driver/SPI4_LCD/Src/lcd_asset_logo_160_80.c \
 ../Per_Driver/SPI4_LCD/Src/lcd_driver_st7735.c \
 ../Per_Driver/SPI4_LCD/Src/lcd_driver_st7735_reg.c \
-../Per_Driver/SPI4_LCD/Src/lcd_mcal.c 
+../Per_Driver/SPI4_LCD/Src/lcd_mcal.c \
+../Per_Driver/SPI4_LCD/Src/national_logo.c 
 
 OBJS += \
 ./Per_Driver/SPI4_LCD/Src/lcd_app.o \
@@ -18,7 +19,8 @@ OBJS += \
 ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_160_80.o \
 ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735.o \
 ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735_reg.o \
-./Per_Driver/SPI4_LCD/Src/lcd_mcal.o 
+./Per_Driver/SPI4_LCD/Src/lcd_mcal.o \
+./Per_Driver/SPI4_LCD/Src/national_logo.o 
 
 C_DEPS += \
 ./Per_Driver/SPI4_LCD/Src/lcd_app.d \
@@ -26,7 +28,8 @@ C_DEPS += \
 ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_160_80.d \
 ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735.d \
 ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735_reg.d \
-./Per_Driver/SPI4_LCD/Src/lcd_mcal.d 
+./Per_Driver/SPI4_LCD/Src/lcd_mcal.d \
+./Per_Driver/SPI4_LCD/Src/national_logo.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
@@ -36,7 +39,7 @@ Per_Driver/SPI4_LCD/Src/%.o Per_Driver/SPI4_LCD/Src/%.su Per_Driver/SPI4_LCD/Src
 clean: clean-Per_Driver-2f-SPI4_LCD-2f-Src
 
 clean-Per_Driver-2f-SPI4_LCD-2f-Src:
-	-$(RM) ./Per_Driver/SPI4_LCD/Src/lcd_app.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_app.d ./Per_Driver/SPI4_LCD/Src/lcd_app.o ./Per_Driver/SPI4_LCD/Src/lcd_app.su ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_128_160.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_128_160.d ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_128_160.o ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_128_160.su ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_160_80.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_160_80.d ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_160_80.o ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_160_80.su ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735.d ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735.o ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735.su ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735_reg.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735_reg.d ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735_reg.o ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735_reg.su ./Per_Driver/SPI4_LCD/Src/lcd_mcal.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_mcal.d ./Per_Driver/SPI4_LCD/Src/lcd_mcal.o ./Per_Driver/SPI4_LCD/Src/lcd_mcal.su
+	-$(RM) ./Per_Driver/SPI4_LCD/Src/lcd_app.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_app.d ./Per_Driver/SPI4_LCD/Src/lcd_app.o ./Per_Driver/SPI4_LCD/Src/lcd_app.su ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_128_160.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_128_160.d ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_128_160.o ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_128_160.su ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_160_80.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_160_80.d ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_160_80.o ./Per_Driver/SPI4_LCD/Src/lcd_asset_logo_160_80.su ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735.d ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735.o ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735.su ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735_reg.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735_reg.d ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735_reg.o ./Per_Driver/SPI4_LCD/Src/lcd_driver_st7735_reg.su ./Per_Driver/SPI4_LCD/Src/lcd_mcal.cyclo ./Per_Driver/SPI4_LCD/Src/lcd_mcal.d ./Per_Driver/SPI4_LCD/Src/lcd_mcal.o ./Per_Driver/SPI4_LCD/Src/lcd_mcal.su ./Per_Driver/SPI4_LCD/Src/national_logo.cyclo ./Per_Driver/SPI4_LCD/Src/national_logo.d ./Per_Driver/SPI4_LCD/Src/national_logo.o ./Per_Driver/SPI4_LCD/Src/national_logo.su
 
 .PHONY: clean-Per_Driver-2f-SPI4_LCD-2f-Src
 
