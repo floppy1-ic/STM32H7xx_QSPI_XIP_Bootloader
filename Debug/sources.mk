@@ -27,5 +27,6 @@ SUBDIRS := \
 Core/Src \
 Core/Startup \
 Drivers/STM32H7xx_HAL_Driver/Src \
-QSPI_Flash/Src \
+Per_Driver/QSPI_Flash/Src \
+Per_Driver/SPI4_LCD/Src \
 
