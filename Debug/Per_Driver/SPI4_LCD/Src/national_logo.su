@@ -1,6 +1,0 @@
-../Per_Driver/SPI4_LCD/Src/national_logo.c:12:13:nl_rect_abs	40	static
-../Per_Driver/SPI4_LCD/Src/national_logo.c:21:13:nl_ring_abs	56	static
-../Per_Driver/SPI4_LCD/Src/national_logo.c:43:13:draw_tiranga_at	80	static
-../Per_Driver/SPI4_LCD/Src/national_logo.c:101:13:draw_tiranga_scaled_centered	32	static
-../Per_Driver/SPI4_LCD/Src/national_logo.c:123:13:national_logo_scaled_framebuffer_transition	40	static
-../Per_Driver/SPI4_LCD/Src/national_logo.c:153:6:national_logo	16	static

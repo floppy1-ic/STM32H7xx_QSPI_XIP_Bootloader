@@ -214,7 +214,7 @@ if (QSPI_Flash_ReadID(&hqspi, jedecId) != QSPI_FLASH_OK) Error_Handler();
 
 The MiniSTM32H750 carries an SPI TFT (ST7735 family) driven from **SPI4** for the data
 bus and **TIM1_CH2N** for the backlight PWM. The driver under
-`Per_Driver/SPI4_LCD/` accesses these through the CubeMX-generated handles
+`Peripherals/SPI4_LCD/` accesses these through the CubeMX-generated handles
 `hspi4` and `htim1`, plus two GPIO outputs for `CS` and `DC/RS`.
 
 ### 7.1) LCD pin map (must match CubeMX `.ioc`)
@@ -228,7 +228,7 @@ SPI / backlight GPIO lines are listed in **Hardware summary → TFT LCD — ST77
 
 > **The User Label matters.** CubeMX auto-generates macros from the User Label, so
 > `LCD_CS` → `LCD_CS_Pin` / `LCD_CS_GPIO_Port` and `LCD_WR_RS` → `LCD_WR_RS_Pin` /
-> `LCD_WR_RS_GPIO_Port`. The LCD driver in `Per_Driver/SPI4_LCD/Src/lcd_app.c` references
+> `LCD_WR_RS_GPIO_Port`. The LCD driver in `Peripherals/SPI4_LCD/Src/lcd_app.c` references
 > exactly those names; renaming the label breaks the build.
 
 ### 7.2) SPI4 / TIM1 peripheral configuration
