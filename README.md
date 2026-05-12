@@ -1,13 +1,13 @@
 # QSPI Flash Driver — STM32H750VBTx + Winbond W25Q64
 
-This module is a small, BSP-aligned QSPI driver for the **Winbond W25Q64** flash on the
+This module is a small QSPI driver for the **Winbond W25Q64** flash on the
 **MiniSTM32H750VBTx** board. It is designed to live alongside CubeMX-generated code and
 relies on the QSPI peripheral being initialized by `MX_QUADSPI_Init()`.
 
 ```
 QSPI_Flash/
 ├── Inc/qspi_flash.h    Public API + W25Q64 commands and geometry
-├── Src/qspi_flash.c    BSP-aligned implementation
+├── Src/qspi_flash.c    Driver implementation
 └── README.md           This file
 ```
 
@@ -70,7 +70,7 @@ because CS never asserts on the chip. The fix is to manually pick `PB6` and `PD1
 
 ---
 
-## 2) QSPI peripheral configuration (must match the BSP example `02-ExtMem_Boot`)
+## 2) QSPI peripheral configuration
 
 | `hqspi.Init.*`            | Value                                | Meaning                              |
 |---------------------------|--------------------------------------|--------------------------------------|
@@ -87,7 +87,7 @@ because CS never asserts on the chip. The fix is to manually pick `PB6` and `PD1
 
 | Field                         | CubeMX default              | Required value              | Changed? |
 |-------------------------------|-----------------------------|-----------------------------|----------|
-| QSPI peripheral parameters    | (matches BSP)               | (matches BSP)               | No       |
+| QSPI peripheral parameters    | (default OK)                | (default OK)                | No       |
 | GPIO `Maximum Output Speed`   | `LOW`                       | `VERY_HIGH`                 | **Yes**  |
 | Pin: `QUADSPI_BK1_NCS`        | `PB10`                      | `PB6`                       | **Yes**  |
 | Pin: `QUADSPI_BK1_IO3`        | `PA1`                       | `PD13`                      | **Yes**  |
@@ -152,9 +152,9 @@ bound, which on this hand-soldered board is comfortable up to **~50–60 MHz**.
 
 ---
 
-## 4) BSP improvements baked into this driver
+## 4) Improvements over stock CubeMX defaults
 
-Each item below carries a `/* BSP improvement: ... */` comment in the source.
+Each item below is documented with an inline comment in the driver source.
 
 | Area                  | Stock CubeMX behaviour                  | This driver does                                                                 |
 |-----------------------|------------------------------------------|----------------------------------------------------------------------------------|
@@ -275,9 +275,30 @@ lcd_stm32h7_message("Hello World");
 | Date         | Change                                                                   |
 |--------------|--------------------------------------------------------------------------|
 | Initial      | Driver created from CubeMX HAL QSPI examples for W25Q64                  |
-| BSP pass 1   | `0x90` ReadID, dual reset path (4-line + 1-line), relaxed `0xEF` check    |
+| Hardening pass 1 | `0x90` ReadID, dual reset path (4-line + 1-line), relaxed `0xEF` check |
 | Pinmap fix   | `NCS` moved `PB10` → `PB6`; `IO3` moved `PA1` → `PD13`; all GPIO `VERY_HIGH` |
 | Clean-up     | Removed `SetLowSpeed`/`SetHighSpeed`; rely on CubeMX prescaler            |
 | LCD pinmap   | `SPI4_MOSI` `PE6` → `PE14`; `TIM1_CH2N` `PB0` → `PE10`; added `LCD_CS=PE11`, `LCD_WR_RS=PE13` (User Labels in CubeMX) |
 | Doc refresh  | Added User Label / AF / Speed columns for QSPI and LCD pin maps          |
 | Doc refresh  | Top **Hardware summary** tables: QSPI + W25Q64 header/pins, then ST7735 / SPI4 + pins |
+
+---
+
+## 10) WeAct Board Reference
+
+| Area | WeAct board setting | Project setting | Status |
+|------|---------------------|-----------------|--------|
+| QSPI flash IC | Winbond W25Q64, 64 Mbit / 8 MB | `qspi_flash` driver targets W25Q64 | Matches |
+| QSPI CLK | `PB2` | `QUADSPI_CLK` on `PB2`, `GPIO_AF9_QUADSPI`, `VERY_HIGH` | Matches |
+| QSPI NCS | `PB6` | `QUADSPI_BK1_NCS` on `PB6`, `GPIO_AF10_QUADSPI`, `VERY_HIGH` | Matches |
+| QSPI IO0 | `PD11` | `QUADSPI_BK1_IO0` on `PD11`, `GPIO_AF9_QUADSPI`, `VERY_HIGH` | Matches |
+| QSPI IO1 | `PD12` | `QUADSPI_BK1_IO1` on `PD12`, `GPIO_AF9_QUADSPI`, `VERY_HIGH` | Matches |
+| QSPI IO2 | `PE2` | `QUADSPI_BK1_IO2` on `PE2`, `GPIO_AF9_QUADSPI`, `VERY_HIGH` | Matches |
+| QSPI IO3 | `PD13` | `QUADSPI_BK1_IO3` on `PD13`, `GPIO_AF9_QUADSPI`, `VERY_HIGH` | Matches |
+| LCD SPI | SPI4 | `hspi4` used by `Peripherals/SPI4_LCD` | Matches |
+| LCD SPI MISO | `PE5` | `SPI4_MISO` on `PE5`, `GPIO_AF5_SPI4`, `VERY_HIGH` | Matches |
+| LCD SPI SCK | `PE12` | `SPI4_SCK` on `PE12`, `GPIO_AF5_SPI4`, `VERY_HIGH` | Matches |
+| LCD SPI MOSI | `PE14` | `SPI4_MOSI` on `PE14`, `GPIO_AF5_SPI4`, `VERY_HIGH` | Matches |
+| LCD backlight PWM | `PE10` / `TIM1_CH2N` | `htim1`, `TIM_CHANNEL_2`, `HAL_TIMEx_PWMN_Start()` | Matches |
+| LCD chip select | `PE11` | CubeMX User Label `LCD_CS` | Matches |
+| LCD data/command | `PE13` | CubeMX User Label `LCD_WR_RS` | Matches |
