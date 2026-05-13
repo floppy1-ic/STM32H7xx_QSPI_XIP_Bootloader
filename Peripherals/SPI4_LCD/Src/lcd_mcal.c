@@ -295,6 +295,7 @@ void lcd_stm32h7_breathout(void)
 void lcd_stm32h7_color(lcd_stm32h7_color_t bg, lcd_stm32h7_color_t fg)
 {
   lcd_bg_fg(lcd_mcal_color565(bg), lcd_mcal_color565(fg));
+  lcd_clear();
 }
 
 uint8_t lcd_stm32h7_size(uint8_t level)

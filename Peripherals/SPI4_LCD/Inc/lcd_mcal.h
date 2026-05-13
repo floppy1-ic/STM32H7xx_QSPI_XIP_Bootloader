@@ -78,9 +78,12 @@ void lcd_stm32h7_breathin(void);
 void lcd_stm32h7_breathout(void);
 
 /**
-  * @brief  Apply background and foreground colors from the MCAL palette (RGB565 internally).
-  * @param  bg Background palette index.
-  * @param  fg Foreground palette index.
+  * @brief  Apply background and foreground colors from the MCAL palette (RGB565 internally)
+  *         and immediately repaint the full LCD with the new background; text cursor
+  *         is reset to (0,0).
+  * @param  bg Background palette index. Used to fill the whole screen right away and as
+  *            the background color for subsequent text.
+  * @param  fg Foreground palette index. Used as the glyph color for subsequent text.
   * @retval None
   */
 void lcd_stm32h7_color(lcd_stm32h7_color_t bg, lcd_stm32h7_color_t fg);
