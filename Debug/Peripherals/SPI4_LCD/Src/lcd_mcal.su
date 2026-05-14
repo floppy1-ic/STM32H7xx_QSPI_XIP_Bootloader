@@ -16,9 +16,9 @@
 ../Peripherals/SPI4_LCD/Src/lcd_mcal.c:285:6:lcd_stm32h7_breathin	8	static
 ../Peripherals/SPI4_LCD/Src/lcd_mcal.c:290:6:lcd_stm32h7_breathout	8	static
 ../Peripherals/SPI4_LCD/Src/lcd_mcal.c:295:6:lcd_stm32h7_color	24	static
-../Peripherals/SPI4_LCD/Src/lcd_mcal.c:300:9:lcd_stm32h7_size	16	static
-../Peripherals/SPI4_LCD/Src/lcd_mcal.c:311:6:lcd_stm32h7_char	16	static
-../Peripherals/SPI4_LCD/Src/lcd_mcal.c:321:6:lcd_stm32h7_message	16	static
-../Peripherals/SPI4_LCD/Src/lcd_mcal.c:326:6:lcd_stm32h7_dynamic_update	48	static
-../Peripherals/SPI4_LCD/Src/lcd_mcal.c:366:6:lcd_stm32h7_clear	8	static
-../Peripherals/SPI4_LCD/Src/lcd_mcal.c:371:6:lcd_stm32h7_init	8	static
+../Peripherals/SPI4_LCD/Src/lcd_mcal.c:301:9:lcd_stm32h7_size	16	static
+../Peripherals/SPI4_LCD/Src/lcd_mcal.c:312:6:lcd_stm32h7_char	16	static
+../Peripherals/SPI4_LCD/Src/lcd_mcal.c:322:6:lcd_stm32h7_message	16	static
+../Peripherals/SPI4_LCD/Src/lcd_mcal.c:327:6:lcd_stm32h7_dynamic_update	48	static
+../Peripherals/SPI4_LCD/Src/lcd_mcal.c:367:6:lcd_stm32h7_clear	8	static
+../Peripherals/SPI4_LCD/Src/lcd_mcal.c:372:6:lcd_stm32h7_init	8	static
