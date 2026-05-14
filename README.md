@@ -281,15 +281,7 @@ lcd_stm32h7_message("Hello World");
 | LCD pinmap   | `SPI4_MOSI` `PE6` → `PE14`; `TIM1_CH2N` `PB0` → `PE10`; added `LCD_CS=PE11`, `LCD_WR_RS=PE13` (User Labels in CubeMX) |
 | Doc refresh  | Added User Label / AF / Speed columns for QSPI and LCD pin maps          |
 | Doc refresh  | Top **Hardware summary** tables: QSPI + W25Q64 header/pins, then ST7735 / SPI4 + pins |
-| Doc refresh  | Added Sibun copyright notice to this README |
-
----
-
-## Copyright
-
-**Copyright © 2026 Sibun.** All rights reserved.
-
-This README documents the QSPI flash driver, peripheral integration, and board reference material in this repository unless otherwise noted.
+| Doc refresh  | Added Sibun copyright notice to this README (at end of document) |
 
 ---
 
@@ -311,3 +303,13 @@ This README documents the QSPI flash driver, peripheral integration, and board r
 | LCD backlight PWM | `PE10` / `TIM1_CH2N` | `htim1`, `TIM_CHANNEL_2`, `HAL_TIMEx_PWMN_Start()` | Matches |
 | LCD chip select | `PE11` | CubeMX User Label `LCD_CS` | Matches |
 | LCD data/command | `PE13` | CubeMX User Label `LCD_WR_RS` | Matches |
+
+---
+
+## Copyright
+
+**Copyright © 2026 Sibun.** All rights reserved.
+
+This README documents the QSPI flash driver, peripheral integration, and board reference material in this repository unless otherwise noted.
+
+---
