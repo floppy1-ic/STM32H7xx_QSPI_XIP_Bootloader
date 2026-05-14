@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    qspi_flash.h
   * @author  Sibun
-  * @brief   Winbond W25Q64 external QSPI flash driver (BSP-aligned).
+  * @brief   Winbond W25Q64 external QSPI flash driver (WeAct align).
   *
   * @copyright
   * Copyright (c) 2026 Sibun. All rights reserved.
@@ -42,14 +42,14 @@ extern "C" {
 #define W25Q64_DEVICE_ID               0x16U       /* Returned by 0x90 for W25Q64               */
 #define W25Q64_JEDEC_ID                0xEF4017U   /* Returned by 0x9F (kept for reference)     */
 
-/* W25Q64 command set (BSP-aligned) ------------------------------------------ */
+/* W25Q64 command set (WeAct align) ----------------------------------------- */
 #define W25Q64_CMD_WRITE_ENABLE        0x06U
 #define W25Q64_CMD_WRITE_DISABLE       0x04U
 #define W25Q64_CMD_READ_STATUS_REG1    0x05U
 #define W25Q64_CMD_READ_STATUS_REG2    0x35U
 #define W25Q64_CMD_READ_STATUS_REG3    0x15U
 #define W25Q64_CMD_WRITE_STATUS_REG1   0x01U   /* Legacy combined SR1+SR2 write              */
-#define W25Q64_CMD_WRITE_STATUS_REG2   0x31U   /* BSP improvement: dedicated SR2 write       */
+#define W25Q64_CMD_WRITE_STATUS_REG2   0x31U   /* Dedicated SR2 write (datasheet)            */
 #define W25Q64_CMD_WRITE_STATUS_REG3   0x11U
 #define W25Q64_CMD_READ_DATA           0x03U
 #define W25Q64_CMD_FAST_READ           0x0BU
@@ -60,7 +60,7 @@ extern "C" {
 #define W25Q64_CMD_BLOCK_ERASE_32K     0x52U
 #define W25Q64_CMD_BLOCK_ERASE_64K     0xD8U
 #define W25Q64_CMD_CHIP_ERASE          0xC7U
-#define W25Q64_CMD_MANUFACTURER_DEV_ID 0x90U   /* BSP improvement: used for ReadID            */
+#define W25Q64_CMD_MANUFACTURER_DEV_ID 0x90U   /* Manufacturer/Device ID read (ReadID)       */
 #define W25Q64_CMD_JEDEC_ID            0x9FU   /* Legacy 3-byte JEDEC (not used by ReadID)    */
 #define W25Q64_CMD_ENABLE_RESET        0x66U
 #define W25Q64_CMD_RESET_DEVICE        0x99U
@@ -93,8 +93,8 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_Init(QSPI_HandleTypeDef *hqspi);
 
 /**
   * @brief  Recover the flash from any prior state (QPI or SPI) and software reset it.
-  *         BSP improvement: issues a blind 4-line Enable-Reset/Reset-Device first to
-  *         escape QPI, then the standard 1-line Enable-Reset/Reset-Device sequence.
+  *         Issues a blind 4-line Enable-Reset/Reset-Device first to escape QPI, then the
+  *         standard 1-line Enable-Reset/Reset-Device sequence.
   * @param  hqspi Pointer to the initialized QSPI handle.
   * @retval QSPI_Flash_StatusTypeDef QSPI_FLASH_OK on success, error code otherwise.
   */
@@ -102,8 +102,8 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_Reset(QSPI_HandleTypeDef *hqspi);
 
 /**
   * @brief  Read Manufacturer/Device ID using command 0x90 with a 24-bit address.
-  *         BSP improvement: 0x90 + addr 0x000000 is more reliable than legacy 0x9F when
-  *         the chip might still be in a Quad/QPI state. Returns 2 bytes:
+  *         0x90 + addr 0x000000 is more reliable than legacy 0x9F when the chip might
+  *         still be in a Quad/QPI state. Returns 2 bytes:
   *           pID[0] = Manufacturer ID (expected 0xEF for Winbond)
   *           pID[1] = Device ID       (expected 0x16 for W25Q64)
   * @param  hqspi Pointer to the initialized QSPI handle.

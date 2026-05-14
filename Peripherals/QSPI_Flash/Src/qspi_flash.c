@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    qspi_flash.c
   * @author  Sibun
-  * @brief   Winbond W25Q64 external QSPI flash driver (BSP-aligned).
+  * @brief   Winbond W25Q64 external QSPI flash driver (WeAct align).
   *
   * @copyright
   * Copyright (c) 2026 Sibun. All rights reserved.
@@ -37,8 +37,8 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_Init(QSPI_HandleTypeDef *hqspi)
     return QSPI_FLASH_ERROR;
   }
 
-  /* BSP improvement: minimal Init - rely on the prescaler / GPIO speed already set
-   * by CubeMX. Sequence is Reset -> ReadID -> validate manufacturer.              */
+  /* Minimal init: rely on the prescaler / GPIO speed already set by CubeMX.
+   * Sequence is Reset -> ReadID -> validate manufacturer.                        */
   if (QSPI_Flash_Reset(hqspi) != QSPI_FLASH_OK)
   {
     return QSPI_FLASH_ERROR;
@@ -76,10 +76,9 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_Reset(QSPI_HandleTypeDef *hqspi)
   cmd.DdrHoldHalfCycle  = QSPI_DDR_HHC_ANALOG_DELAY;
   cmd.SIOOMode          = QSPI_SIOO_INST_EVERY_CMD;
 
-  /* BSP improvement: blind 4-line reset first to recover the chip from QPI mode
-   * (e.g. soft reset of the MCU while the flash kept its prior state). Errors are
-   * intentionally ignored - the chip may not even be in QPI - but it guarantees
-   * the subsequent 1-line reset will land. Mirrors the vendor BSP reset path.    */
+  /* Blind 4-line reset first to recover the chip from QPI mode (e.g. soft reset of
+   * the MCU while the flash kept its prior state). Errors are intentionally ignored
+   * - the chip may not even be in QPI - but it helps the subsequent 1-line reset land. */
   cmd.InstructionMode = QSPI_INSTRUCTION_4_LINES;
   cmd.Instruction     = W25Q64_CMD_ENABLE_RESET;
   (void)HAL_QSPI_Command(hqspi, &cmd, QSPI_FLASH_DEFAULT_TIMEOUT);
@@ -119,10 +118,9 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_ReadID(QSPI_HandleTypeDef *hqspi, uint8_t *p
     return QSPI_FLASH_ERROR;
   }
 
-  /* BSP improvement: use 0x90 Manufacturer/Device ID with a 24-bit address (0x000000).
-   * Returns:
+  /* 0x90 Manufacturer/Device ID with a 24-bit address (0x000000). Returns:
    *   pID[0] = Manufacturer ID (0xEF for Winbond)
-   *   pID[1] = Device ID       (0x16 for W25Q64)                                     */
+   *   pID[1] = Device ID       (0x16 for W25Q64)                                   */
   cmd.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
   cmd.Instruction       = W25Q64_CMD_MANUFACTURER_DEV_ID;
   cmd.AddressMode       = QSPI_ADDRESS_1_LINE;
