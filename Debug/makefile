@@ -11,6 +11,7 @@ RM := rm -rf
 -include sources.mk
 -include Peripherals/SPI4_LCD/Src/subdir.mk
 -include Peripherals/QSPI_Flash/Src/subdir.mk
+-include Features/src/subdir.mk
 -include Drivers/STM32H7xx_HAL_Driver/Src/subdir.mk
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk

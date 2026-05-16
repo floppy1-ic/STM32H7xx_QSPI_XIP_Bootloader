@@ -27,6 +27,7 @@
 "./Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_tim.o"
 "./Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_tim_ex.o"
 "./Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_ll_delayblock.o"
+"./Features/src/qspi_app_jump.o"
 "./Peripherals/QSPI_Flash/Src/qspi_flash.o"
 "./Peripherals/SPI4_LCD/Src/lcd_app.o"
 "./Peripherals/SPI4_LCD/Src/lcd_asset_logo_128_160.o"
