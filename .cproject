@@ -49,7 +49,7 @@
 									<listOptionValue builtIn="false" value="../Core/Inc"/>
 									<listOptionValue builtIn="false" value="../Peripherals/QSPI_Flash/Inc"/>
 									<listOptionValue builtIn="false" value="../Peripherals/SPI4_LCD/Inc"/>
-									<listOptionValue builtIn="false" value="../Features/inc"/>
+									<listOptionValue builtIn="false" value="../Features/qspi_app_jump/inc"/>
 									<listOptionValue builtIn="false" value="../Drivers/STM32H7xx_HAL_Driver/Inc"/>
 									<listOptionValue builtIn="false" value="../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy"/>
 									<listOptionValue builtIn="false" value="../Drivers/CMSIS/Device/ST/STM32H7xx/Include"/>
@@ -131,7 +131,7 @@
 									<listOptionValue builtIn="false" value="../Core/Inc"/>
 									<listOptionValue builtIn="false" value="../Peripherals/QSPI_Flash/Inc"/>
 									<listOptionValue builtIn="false" value="../Peripherals/SPI4_LCD/Inc"/>
-									<listOptionValue builtIn="false" value="../Features/inc"/>
+									<listOptionValue builtIn="false" value="../Features/qspi_app_jump/inc"/>
 									<listOptionValue builtIn="false" value="../Drivers/STM32H7xx_HAL_Driver/Inc"/>
 									<listOptionValue builtIn="false" value="../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy"/>
 									<listOptionValue builtIn="false" value="../Drivers/CMSIS/Device/ST/STM32H7xx/Include"/>
