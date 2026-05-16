@@ -1,0 +1,5 @@
+../Drivers/CMSIS/Include/core_cm7.h:1993:22:__NVIC_ClearPendingIRQ	16	static
+../Features/src/qspi_app_jump.c:24:13:QSPI_App_Jump_IsThumbAddress	16	static
+../Features/src/qspi_app_jump.c:29:13:QSPI_App_Jump_IsStackPointerValid	16	static
+../Features/src/qspi_app_jump.c:45:6:qspi_app_is_valid	32	static
+../Features/src/qspi_app_jump.c:72:19:qspi_app_jump_to_application	40	static,ignoring_inline_asm
