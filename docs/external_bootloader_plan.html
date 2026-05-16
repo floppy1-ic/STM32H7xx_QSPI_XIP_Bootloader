@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>External QSPI Bootloader — Plan</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a2332;
+      --border: #2d3a4f;
+      --text: #e6edf3;
+      --muted: #8b9cb3;
+      --accent: #58a6ff;
+      --ok: #3fb950;
+      --warn: #d29922;
+      --flash: #f778ba;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      margin: 0;
+      padding: 2rem 1.5rem 4rem;
+      max-width: 920px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    h1 { font-size: 1.75rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+    h2 {
+      font-size: 1.2rem;
+      margin-top: 2.5rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--accent);
+    }
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    th { color: var(--muted); font-weight: 500; }
+    code, .addr {
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 0.88em;
+      background: #0d1117;
+      padding: 0.12em 0.4em;
+      border-radius: 4px;
+      color: var(--flash);
+    }
+    ol.steps { padding-left: 1.25rem; }
+    ol.steps li { margin-bottom: 0.65rem; }
+    ol.steps strong { color: var(--ok); }
+    .mermaid {
+      background: #0d1117;
+      border-radius: 8px;
+      padding: 1rem;
+      margin: 1rem 0;
+      overflow-x: auto;
+    }
+    .note {
+      border-left: 3px solid var(--warn);
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      background: rgba(210, 153, 34, 0.08);
+      font-size: 0.92rem;
+    }
+    .proof dt { color: var(--muted); font-size: 0.85rem; margin-top: 0.75rem; }
+    .proof dd { margin: 0.25rem 0 0 0; }
+    footer {
+      margin-top: 3rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+  <h1>External QSPI Bootloader — Design Plan</h1>
+  <p class="subtitle">
+    STM32H750VBTx · Bootloader in internal flash · Application in W25Q64 (XIP)<br />
+    Copyright © 2026 Sibun
+  </p>
+
+  <section>
+    <h2 style="margin-top:0;border:none;color:var(--text);">Simple explanation</h2>
+    <p>
+      The <strong>bootloader</strong> always lives in the MCU’s <strong>128&nbsp;KB internal flash</strong>,
+      starting at <code>0x08000000</code>. After reset, only this code runs first.
+    </p>
+    <p>
+      The <strong>application</strong> lives on the external <strong>W25Q64</strong> chip.
+      When programming, the driver uses flash <strong>offset</strong> <code>0x00000000</code>.
+      When executing, the CPU sees it at <strong>XIP address</strong> <code>0x90000000</code>
+      (after memory-mapped mode is enabled).
+    </p>
+    <p>
+      On every boot, the bootloader reads a <strong><code>write_bin</code> flag</strong>:
+    </p>
+    <ul>
+      <li><strong>Flag ON</strong> — Program a new application binary into external flash (indirect QSPI mode), clear the flag, turn memory-mapped mode back on, then <strong>soft reset</strong> so the bootloader runs again cleanly.</li>
+      <li><strong>Flag OFF</strong> — Enable memory-mapped mode, check that a valid vector table exists at <code>0x90000000</code>, then <strong>jump</strong> into the application.</li>
+    </ul>
+    <p>
+      After a successful flash, you use a <strong>soft reset</strong> (not a direct jump) so peripherals and NVIC state
+      are left in a known state; on the <em>next</em> boot the flag is already OFF and the normal jump path runs.
+    </p>
+  </section>
+
+  <section>
+    <h2 style="margin-top:0;border:none;color:var(--text);">Memory map</h2>
+    <table>
+      <thead>
+        <tr><th>Region</th><th>Address (CPU view)</th><th>Size</th><th>Role</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Internal FLASH</td>
+          <td><code>0x08000000</code> …</td>
+          <td>128 KB</td>
+          <td><strong>QSPI bootloader</strong> (this project, always runs first)</td>
+        </tr>
+        <tr>
+          <td>External flash offset</td>
+          <td><code>0x00000000</code> … <code>0x007FFFFF</code></td>
+          <td>8 MB</td>
+          <td>Application image (programming / erase use this offset)</td>
+        </tr>
+        <tr>
+          <td>QSPI XIP (memory-mapped)</td>
+          <td><code>0x90000000</code> … <code>0x907FFFFF</code></td>
+          <td>8 MB</td>
+          <td>Same bytes as above — CPU fetch &amp; jump address</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2 style="margin-top:0;border:none;color:var(--text);">Your six rules (numbered plan)</h2>
+    <ol class="steps">
+      <li><strong>Bootloader default address</strong> — Link and run from internal flash <code>0x08000000</code> (128&nbsp;KB). CubeIDE linker: <code>STM32H750VBTX_FLASH.ld</code>.</li>
+      <li><strong>Always check <code>write_bin</code> flag first</strong> — Before jump or flash logic, read persistent flag (RTC backup, backup SRAM, or dedicated flash sector — TBD in implementation).</li>
+      <li><strong>If flag enabled</strong> — Call <code>QSPI_Flash_DisableMemoryMappedMode()</code> so the QSPI peripheral can use indirect program/erase commands.</li>
+      <li><strong>If memory-mapped mode is off</strong> — Write application <code>.bin</code> to external flash starting at offset <code>0x00000000</code> via <code>QSPI_Flash_Erase*</code> + <code>QSPI_Flash_Write</code>.</li>
+      <li><strong>Normal boot (flag OFF)</strong> — Enable memory-mapped mode, validate vector table at <code>0x90000000</code>, <code>qspi_app_jump_to_application()</code>.</li>
+      <li><strong>After flash complete (flag was ON)</strong> — Clear <code>write_bin</code>, enable memory-mapped mode, then <strong>soft reset</strong> (<code>NVIC_SystemReset()</code>). Bootloader runs again; flag is OFF → step 5 path → jump to app.</li>
+    </ol>
+    <div class="note">
+      <strong>Note on step 5 vs 6:</strong> After programming, use <em>soft reset</em> (step 6), not an immediate jump.
+      The second boot performs validation and jump with a clean core state.
+    </div>
+  </section>
+
+  <section>
+    <h2 style="margin-top:0;border:none;color:var(--text);">Flow chart</h2>
+    <div class="mermaid">
+flowchart TD
+    A([Power-on / Reset]) --> B[Bootloader @ 0x08000000]
+    B --> C[HAL + QSPI + LCD init]
+    C --> D{write_bin flag?}
+
+    D -->|ENABLED| E[Disable memory-mapped mode]
+    E --> F[Erase + write app.bin @ flash offset 0x00000000]
+    F --> G[Clear write_bin flag]
+    G --> H[Enable memory-mapped mode]
+    H --> I[NVIC_SystemReset - soft reset]
+
+    I --> B
+
+    D -->|DISABLED| J[Enable memory-mapped mode]
+    J --> K{Valid app @ 0x90000000?}
+    K -->|Yes| L[qspi_app_jump_to_application]
+    L --> M([Application running])
+    K -->|No| N([Stay in bootloader / error UI])
+    </div>
+  </section>
+
+  <section>
+    <h2 style="margin-top:0;border:none;color:var(--text);">Sequence — flash update path</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant Host as Host / tool
+    participant BL as Bootloader 0x08000000
+    participant QSPI as W25Q64 driver
+    participant EXT as External flash
+
+    Host->>BL: Set write_bin flag + provide bin
+    BL->>BL: Reset
+    BL->>BL: read write_bin = ON
+    BL->>QSPI: DisableMemoryMappedMode
+    BL->>QSPI: Erase + Write @ 0x00000000
+    QSPI->>EXT: Program application
+    BL->>BL: write_bin = OFF
+    BL->>QSPI: EnableMemoryMappedMode
+    BL->>BL: NVIC_SystemReset
+    BL->>BL: read write_bin = OFF
+    BL->>QSPI: EnableMemoryMappedMode
+    BL->>BL: Jump to 0x90000000
+    </div>
+  </section>
+
+  <section>
+    <h2 style="margin-top:0;border:none;color:var(--text);">Proof — mapping to this repository</h2>
+    <dl class="proof">
+      <dt>1 — Bootloader @ 0x08000000</dt>
+      <dd>Linker script <code>STM32H750VBTX_FLASH.ld</code>: <code>FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 128K</code></dd>
+
+      <dt>2 — write_bin flag</dt>
+      <dd><em>To implement.</em> Suggested: RTC backup register (survives reset) or last 4&nbsp;KB of internal flash. Magic + flag byte + optional CRC.</dd>
+
+      <dt>3 — Disable memory-mapped mode</dt>
+      <dd><code>QSPI_Flash_DisableMemoryMappedMode(&amp;hqspi)</code> in <code>Peripherals/QSPI_Flash/Src/qspi_flash.c</code></dd>
+
+      <dt>4 — Write app @ offset 0</dt>
+      <dd><code>QSPI_Flash_EraseSector</code> / <code>QSPI_Flash_Write</code> with <code>Address = 0x00000000</code> (see <code>EXT_START_ADDR</code> in <code>Core/Src/main.c</code>)</dd>
+
+      <dt>5 — Jump when flag OFF</dt>
+      <dd><code>QSPI_Flash_EnableMemoryMappedMode</code> → <code>qspi_app_is_valid(0x90000000)</code> → <code>qspi_app_jump_to_application</code> in <code>Features/qspi_app_jump/src/qspi_app_jump.c</code></dd>
+
+      <dt>6 — Soft reset after flash</dt>
+      <dd><code>NVIC_SystemReset()</code> (already stubbed as <code>system_reset()</code> in <code>Core/Src/main.c</code>)</dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2 style="margin-top:0;border:none;color:var(--text);">Implementation checklist</h2>
+    <table>
+      <thead><tr><th>Item</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Bootloader linked at 0x08000000</td><td style="color:var(--ok)">Done</td></tr>
+        <tr><td>QSPI driver (erase / write / mmap)</td><td style="color:var(--ok)">Done</td></tr>
+        <tr><td>App jump helper</td><td style="color:var(--ok)">Done</td></tr>
+        <tr><td><code>write_bin</code> flag storage + API</td><td style="color:var(--warn)">Planned</td></tr>
+        <tr><td>Boot state machine in <code>main.c</code></td><td style="color:var(--warn)">Planned</td></tr>
+        <tr><td>Remove test string write @ offset 0 (conflicts with app vectors)</td><td style="color:var(--warn)">Required before production</td></tr>
+        <tr><td>External app linker @ 0x90000000</td><td style="color:var(--warn)">Separate project</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    Open this file in any browser. Diagrams use Mermaid (CDN). Project: STM32H7xx_qspi_flash.
+  </footer>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "dark",
+      flowchart: { curve: "basis" }
+    });
+  </script>
+</body>
+</html>
