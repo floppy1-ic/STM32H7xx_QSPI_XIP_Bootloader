@@ -1,0 +1,3 @@
+../Features/qspi_app_flag/src/qspi_app_flag.c:21:13:QSPI_App_Flag_EraseAndProgram	24	static
+../Features/qspi_app_flag/src/qspi_app_flag.c:49:6:qspi_enable_flag	16	static
+../Features/qspi_app_flag/src/qspi_app_flag.c:54:6:qspi_disable_flag	16	static
