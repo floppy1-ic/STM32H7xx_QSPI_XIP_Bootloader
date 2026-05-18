@@ -33,9 +33,12 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_spi_ex.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h \
- ../Peripherals/QSPI_Flash/Inc/qspi_flash.h \
- ../Features/inc/qspi_app_jump.h ../Peripherals/SPI4_LCD/Inc/lcd_mcal.h \
- ../Peripherals/SPI4_LCD/Inc/national_logo.h
+ ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h \
+ ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h \
+ ../Peripherals/SPI4_LCD/Inc/lcd_mcal.h \
+ ../Features/app_shared_ram/inc/app_shared_ram.h \
+ ../Features/qspi_app_load/inc/qspi_app_load.h \
+ ../Peripherals/UART1/Inc/uart_mcal.h
 ../Core/Inc/main.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h:
 ../Core/Inc/stm32h7xx_hal_conf.h:
@@ -71,7 +74,9 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_spi_ex.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h:
-../Peripherals/QSPI_Flash/Inc/qspi_flash.h:
-../Features/inc/qspi_app_jump.h:
+../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h:
+../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h:
 ../Peripherals/SPI4_LCD/Inc/lcd_mcal.h:
-../Peripherals/SPI4_LCD/Inc/national_logo.h:
+../Features/app_shared_ram/inc/app_shared_ram.h:
+../Features/qspi_app_load/inc/qspi_app_load.h:
+../Peripherals/UART1/Inc/uart_mcal.h:

@@ -35,6 +35,8 @@ Peripherals/SPI4_LCD/Src/lcd_mcal.o: \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_spi_ex.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h \
+ ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h \
+ ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h \
  ../Peripherals/SPI4_LCD/Inc/st7735.h \
  ../Peripherals/SPI4_LCD/Inc/st7735_reg.h \
  ../Peripherals/SPI4_LCD/Inc/lcd_driver_st7735_reg.h
@@ -75,6 +77,8 @@ Peripherals/SPI4_LCD/Src/lcd_mcal.o: \
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_spi_ex.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h:
+../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h:
+../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h:
 ../Peripherals/SPI4_LCD/Inc/st7735.h:
 ../Peripherals/SPI4_LCD/Inc/st7735_reg.h:
 ../Peripherals/SPI4_LCD/Inc/lcd_driver_st7735_reg.h:

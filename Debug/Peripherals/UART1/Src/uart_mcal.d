@@ -1,5 +1,5 @@
-Peripherals/SPI4_LCD/Src/lcd_app.o: ../Peripherals/SPI4_LCD/Src/lcd_app.c \
- ../Peripherals/SPI4_LCD/Inc/lcd.h ../Core/Inc/main.h \
+Peripherals/UART1/Src/uart_mcal.o: ../Peripherals/UART1/Src/uart_mcal.c \
+ ../Peripherals/UART1/Inc/uart_mcal.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h \
  ../Core/Inc/stm32h7xx_hal_conf.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc.h \
@@ -35,14 +35,8 @@ Peripherals/SPI4_LCD/Src/lcd_app.o: ../Peripherals/SPI4_LCD/Src/lcd_app.c \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h \
- ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h \
- ../Peripherals/SPI4_LCD/Inc/st7735.h \
- ../Peripherals/SPI4_LCD/Inc/st7735_reg.h \
- ../Peripherals/SPI4_LCD/Inc/lcd_driver_st7735_reg.h \
- ../Peripherals/SPI4_LCD/Inc/font.h \
- ../Peripherals/SPI4_LCD/Inc/lcd_asset_font.h
-../Peripherals/SPI4_LCD/Inc/lcd.h:
-../Core/Inc/main.h:
+ ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
+../Peripherals/UART1/Inc/uart_mcal.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h:
 ../Core/Inc/stm32h7xx_hal_conf.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc.h:
@@ -79,8 +73,3 @@ Peripherals/SPI4_LCD/Src/lcd_app.o: ../Peripherals/SPI4_LCD/Src/lcd_app.c \
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h:
-../Peripherals/SPI4_LCD/Inc/st7735.h:
-../Peripherals/SPI4_LCD/Inc/st7735_reg.h:
-../Peripherals/SPI4_LCD/Inc/lcd_driver_st7735_reg.h:
-../Peripherals/SPI4_LCD/Inc/font.h:
-../Peripherals/SPI4_LCD/Inc/lcd_asset_font.h:

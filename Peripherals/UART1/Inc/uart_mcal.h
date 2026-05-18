@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file    uart_mcal.h
-  * @brief   USART1 UART MCAL (PA9 TX / PA10 RX, 115200 8N1) for STM32H7.
+  * @brief   USART1 UART MCAL (PB14 TX / PB15 RX, 115200 8N1) for STM32H7.
   *
   * CubeMX owns `huart1` and `MX_USART1_UART_Init()` in Core/Src/main.c.
   ******************************************************************************
