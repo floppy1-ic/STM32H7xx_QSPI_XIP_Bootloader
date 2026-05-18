@@ -1,0 +1,4 @@
+../Drivers/CMSIS/Include/core_cm7.h:2156:34:__NVIC_SystemReset	1
+../Features/qspi_app_load/src/qspi_app_load.c:20:6:qspi_app_erase_flash_sector	1
+../Features/qspi_app_load/src/qspi_app_load.c:25:6:qspi_app_write_flash	3
+../Features/qspi_app_load/src/qspi_app_load.c:35:6:qspi_new_app_load	0

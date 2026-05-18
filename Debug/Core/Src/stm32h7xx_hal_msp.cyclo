@@ -6,3 +6,5 @@
 ../Core/Src/stm32h7xx_hal_msp.c:278:6:HAL_TIM_PWM_MspInit	2
 ../Core/Src/stm32h7xx_hal_msp.c:295:6:HAL_TIM_MspPostInit	2
 ../Core/Src/stm32h7xx_hal_msp.c:327:6:HAL_TIM_PWM_MspDeInit	2
+../Core/Src/stm32h7xx_hal_msp.c:349:6:HAL_UART_MspInit	3
+../Core/Src/stm32h7xx_hal_msp.c:397:6:HAL_UART_MspDeInit	2
