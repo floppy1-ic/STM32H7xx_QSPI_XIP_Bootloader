@@ -3,37 +3,132 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>External QSPI Bootloader — Plan</title>
+  <title>Saptashri Secure XIP Bootloader — Design Plan</title>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <style>
     :root {
-      --bg: #0f1419;
-      --card: #1a2332;
-      --border: #2d3a4f;
-      --text: #e6edf3;
-      --muted: #8b9cb3;
-      --accent: #58a6ff;
+      --bg-deep: #020308;
+      --bg-mid: #0a0e1c;
+      --card: rgba(14, 20, 38, 0.82);
+      --card-solid: #0e1426;
+      --border: rgba(100, 130, 200, 0.22);
+      --border-glow: rgba(110, 182, 255, 0.35);
+      --text: #e8ecf4;
+      --muted: #8b9cc4;
+      --accent: #7ec8ff;
+      --accent-soft: #a78bfa;
       --ok: #3fb950;
-      --warn: #d29922;
-      --flash: #f778ba;
+      --warn: #e8b84a;
+      --flash: #f0a6d8;
+      --planned: #b88cff;
     }
     * { box-sizing: border-box; }
+    html {
+      scroll-behavior: smooth;
+      background: var(--bg-deep);
+    }
     body {
       font-family: "Segoe UI", system-ui, sans-serif;
-      background: var(--bg);
       color: var(--text);
       line-height: 1.6;
       margin: 0;
-      padding: 2rem 1.5rem 4rem;
-      max-width: 920px;
-      margin-left: auto;
-      margin-right: auto;
+      padding: 0 0 4rem;
+      width: 100%;
+      min-height: 100vh;
+      position: relative;
+      background:
+        radial-gradient(ellipse 120% 80% at 50% -20%, rgba(55, 40, 120, 0.35), transparent 55%),
+        radial-gradient(ellipse 90% 60% at 100% 30%, rgba(30, 80, 140, 0.2), transparent 50%),
+        radial-gradient(ellipse 70% 50% at 0% 70%, rgba(90, 40, 110, 0.18), transparent 45%),
+        radial-gradient(ellipse 50% 40% at 60% 90%, rgba(20, 60, 100, 0.15), transparent 40%),
+        linear-gradient(175deg, #010206 0%, #060a14 35%, #0a1020 65%, #030508 100%);
+      background-attachment: fixed;
     }
-    h1 { font-size: 1.75rem; font-weight: 600; margin-bottom: 0.25rem; }
-    .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      pointer-events: none;
+      background-image:
+        radial-gradient(1.5px 1.5px at 8% 12%, rgba(255, 255, 255, 0.9), transparent),
+        radial-gradient(1px 1px at 18% 28%, rgba(255, 255, 255, 0.55), transparent),
+        radial-gradient(1.2px 1.2px at 32% 8%, rgba(200, 220, 255, 0.7), transparent),
+        radial-gradient(1px 1px at 45% 22%, rgba(255, 255, 255, 0.45), transparent),
+        radial-gradient(1.5px 1.5px at 62% 15%, rgba(255, 255, 255, 0.75), transparent),
+        radial-gradient(1px 1px at 78% 35%, rgba(255, 255, 255, 0.5), transparent),
+        radial-gradient(1px 1px at 92% 18%, rgba(255, 255, 255, 0.6), transparent),
+        radial-gradient(1.2px 1.2px at 5% 48%, rgba(255, 255, 255, 0.65), transparent),
+        radial-gradient(1px 1px at 22% 62%, rgba(255, 255, 255, 0.4), transparent),
+        radial-gradient(1.5px 1.5px at 38% 55%, rgba(255, 255, 255, 0.85), transparent),
+        radial-gradient(1px 1px at 55% 72%, rgba(255, 255, 255, 0.5), transparent),
+        radial-gradient(1px 1px at 70% 58%, rgba(200, 210, 255, 0.55), transparent),
+        radial-gradient(1.2px 1.2px at 88% 68%, rgba(255, 255, 255, 0.7), transparent),
+        radial-gradient(1px 1px at 12% 82%, rgba(255, 255, 255, 0.45), transparent),
+        radial-gradient(1.5px 1.5px at 48% 88%, rgba(255, 255, 255, 0.8), transparent),
+        radial-gradient(1px 1px at 82% 92%, rgba(255, 255, 255, 0.5), transparent),
+        radial-gradient(2px 2px at 28% 42%, rgba(180, 200, 255, 0.35), transparent),
+        radial-gradient(2px 2px at 58% 38%, rgba(200, 180, 255, 0.3), transparent);
+      opacity: 0.85;
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 50% 50%, transparent 0%, rgba(2, 3, 8, 0.4) 100%);
+    }
+    .page-wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 clamp(0.75rem, 3vw, 1.5rem);
+    }
+    .doc-header {
+      text-align: center;
+      padding: clamp(1.5rem, 4vw, 2rem) 0 clamp(1rem, 3vw, 1.25rem);
+      margin-bottom: 0.5rem;
+      background: transparent;
+    }
+    .doc-header h1 {
+      margin: 0 0 0.5rem;
+      font-size: clamp(1.4rem, 4.5vw, 2rem);
+      font-weight: 700;
+      line-height: 1.25;
+      color: var(--text);
+      text-shadow: 0 0 40px rgba(126, 200, 255, 0.25), 0 0 80px rgba(167, 139, 250, 0.12);
+    }
+    .doc-header .doc-tagline {
+      margin: 0 0 0.75rem;
+      font-size: clamp(0.9rem, 2.5vw, 1.05rem);
+      color: var(--accent);
+      text-shadow: 0 0 24px rgba(126, 200, 255, 0.2);
+    }
+    .doc-header .doc-meta {
+      margin: 0;
+      font-size: clamp(0.78rem, 2vw, 0.86rem);
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .doc-header .doc-meta a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(126, 200, 255, 0.35);
+    }
+    .doc-header .doc-meta a:hover {
+      color: #b8e0ff;
+      border-bottom-color: var(--accent);
+    }
+    .doc-header .doc-meta code {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border);
+    }
     h2 {
-      font-size: 1.2rem;
-      margin-top: 2.5rem;
+      font-size: clamp(1.05rem, 3vw, 1.2rem);
+      margin-top: 0;
       margin-bottom: 1rem;
       padding-bottom: 0.35rem;
       border-bottom: 1px solid var(--border);
@@ -41,231 +136,603 @@
     }
     section {
       background: var(--card);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 1.25rem 1.5rem;
+      padding: clamp(1rem, 3vw, 1.25rem) clamp(1rem, 3vw, 1.5rem);
       margin-bottom: 1.25rem;
+      box-shadow:
+        0 4px 24px rgba(0, 0, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 0.5rem 0;
     }
     table {
       width: 100%;
+      min-width: 520px;
       border-collapse: collapse;
-      font-size: 0.9rem;
+      font-size: clamp(0.82rem, 2.2vw, 0.9rem);
     }
     th, td {
       text-align: left;
       padding: 0.55rem 0.75rem;
       border-bottom: 1px solid var(--border);
     }
-    th { color: var(--muted); font-weight: 500; }
+    th { color: var(--muted); font-weight: 500; white-space: nowrap; }
     code, .addr {
       font-family: "Cascadia Code", "Consolas", monospace;
       font-size: 0.88em;
-      background: #0d1117;
+      background: rgba(4, 8, 18, 0.75);
       padding: 0.12em 0.4em;
       border-radius: 4px;
       color: var(--flash);
+      border: 1px solid rgba(100, 130, 200, 0.15);
+      word-break: break-word;
     }
-    ol.steps { padding-left: 1.25rem; }
+    ol.steps { padding-left: 1.25rem; margin: 0; }
     ol.steps li { margin-bottom: 0.65rem; }
     ol.steps strong { color: var(--ok); }
-    .mermaid {
-      background: #0d1117;
-      border-radius: 8px;
-      padding: 1rem;
-      margin: 1rem 0;
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.25rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 0.75rem;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+    .dot-done, .dot-plan {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-done { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    .dot-plan {
+      background: var(--planned);
+      border: 1px dashed var(--planned);
+      animation: pulseDot 2s ease-in-out infinite;
+    }
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.55; transform: scale(0.85); }
+    }
+    .diagram-wrap {
+      position: relative;
+      width: 100%;
       overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      background: rgba(4, 8, 20, 0.92);
+      border-radius: 8px;
+      padding: clamp(0.75rem, 2vw, 1rem);
+      margin: 1rem 0;
+      border: 1px solid var(--border);
+      box-shadow: inset 0 0 60px rgba(30, 50, 100, 0.08);
+    }
+    .diagram-wrap .mermaid {
+      display: block;
+      text-align: center;
+      min-width: min(100%, 320px);
+    }
+    .diagram-wrap .mermaid svg {
+      max-width: 100%;
+      display: inline-block;
+      vertical-align: top;
+    }
+    .diagram-wrap.flow-primary {
+      border-color: rgba(126, 200, 255, 0.3);
+      box-shadow:
+        0 0 32px rgba(88, 140, 255, 0.08),
+        inset 0 0 80px rgba(55, 80, 160, 0.06);
+    }
+    .diagram-wrap.mermaid-pending {
+      min-height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .diagram-wrap.mermaid-pending::after {
+      content: "Loading diagram…";
+      animation: shimmer 1.2s ease-in-out infinite;
+    }
+    @keyframes shimmer {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+    .diagram-wrap.mermaid-ready.mermaid-pending::after { content: none; }
+    /* Safe animations: opacity on nodes, transform only on outer wrapper (not g.node) */
+    .diagram-wrap.mermaid-ready .mermaid-canvas {
+      animation: canvasEnter 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .diagram-wrap.mermaid-ready.flow-primary {
+      animation: borderGlow 4s ease-in-out 0.5s infinite;
+    }
+    .diagram-wrap.mermaid-ready g.node.anim-node {
+      opacity: 0;
+      animation: nodeFadeIn 0.5s ease-out forwards;
+    }
+    .diagram-wrap.mermaid-ready g.node.anim-decision {
+      animation: nodeFadeIn 0.5s ease-out forwards, decisionPulse 2.8s ease-in-out infinite;
+    }
+    .diagram-wrap.mermaid-ready path.anim-edge {
+      stroke-dasharray: 8 6;
+      animation: edgeFlow 2s linear infinite;
+    }
+    .diagram-wrap.mermaid-ready .sequenceDiagram .actor,
+    .diagram-wrap.mermaid-ready .messageLine0,
+    .diagram-wrap.mermaid-ready .messageText {
+      opacity: 0;
+      animation: nodeFadeIn 0.45s ease-out forwards;
+    }
+    @keyframes canvasEnter {
+      from { opacity: 0; transform: scale(0.97); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes nodeFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes edgeFlow {
+      to { stroke-dashoffset: -28; }
+    }
+    @keyframes decisionPulse {
+      0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+      50% { filter: drop-shadow(0 0 10px rgba(163, 113, 247, 0.55)); }
+    }
+    @keyframes borderGlow {
+      0%, 100% { box-shadow: 0 0 20px rgba(88, 166, 255, 0.05); border-color: rgba(88, 166, 255, 0.35); }
+      50% { box-shadow: 0 0 36px rgba(88, 166, 255, 0.14); border-color: rgba(88, 166, 255, 0.55); }
     }
     .note {
       border-left: 3px solid var(--warn);
       padding: 0.75rem 1rem;
       margin: 1rem 0;
-      background: rgba(210, 153, 34, 0.08);
+      background: rgba(210, 153, 34, 0.1);
       font-size: 0.92rem;
+      border-radius: 0 6px 6px 0;
     }
     .proof dt { color: var(--muted); font-size: 0.85rem; margin-top: 0.75rem; }
     .proof dd { margin: 0.25rem 0 0 0; }
     footer {
-      margin-top: 3rem;
+      margin-top: 2rem;
       font-size: 0.8rem;
       color: var(--muted);
+      word-break: break-word;
+      text-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    }
+    @media (max-width: 600px) {
+      ol.steps { padding-left: 1rem; }
+      .legend { flex-direction: column; gap: 0.5rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .diagram-wrap.mermaid-ready .mermaid-canvas,
+      .diagram-wrap.mermaid-ready.flow-primary,
+      .diagram-wrap.mermaid-ready g.node.anim-node,
+      .diagram-wrap.mermaid-ready g.node.anim-decision,
+      .diagram-wrap.mermaid-ready path.anim-edge,
+      .diagram-wrap.mermaid-ready .actor,
+      .diagram-wrap.mermaid-ready .messageLine0,
+      .diagram-wrap.mermaid-ready .messageText,
+      .dot-plan {
+        animation: none !important;
+        opacity: 1 !important;
+        filter: none !important;
+      }
     }
   </style>
 </head>
 <body>
 
-  <h1>External QSPI Bootloader — Design Plan</h1>
-  <p class="subtitle">
-    STM32H750VBTx · Bootloader in internal flash · Application in W25Q64 (XIP)<br />
-    Copyright © 2026 Sibun
-  </p>
+  <main class="page-wrap">
+
+  <header class="doc-header" role="banner">
+    <h1>Saptashri Secure XIP Bootloader</h1>
+    <p class="doc-tagline">STM32H750VBTx · Internal flash boot · W25Q64 XIP · Backup SRAM load flag · USART1 host UART</p>
+    <p class="doc-meta">
+      Design plan · Copyright © 2026 Sibun · <a href="README.md">README.md</a><br />
+      <code>STM32H7xx_qspi_flash/external_bootloader_plan.html</code>
+    </p>
+  </header>
 
   <section>
-    <h2 style="margin-top:0;border:none;color:var(--text);">Simple explanation</h2>
+    <h2>Simple explanation</h2>
     <p>
-      The <strong>bootloader</strong> always lives in the MCU’s <strong>128&nbsp;KB internal flash</strong>,
-      starting at <code>0x08000000</code>. After reset, only this code runs first.
+      The <strong>bootloader</strong> lives in <strong>128&nbsp;KB internal flash</strong> at <code>0x08000000</code>
+      and runs first after every reset.
     </p>
     <p>
-      The <strong>application</strong> lives on the external <strong>W25Q64</strong> chip.
-      When programming, the driver uses flash <strong>offset</strong> <code>0x00000000</code>.
-      When executing, the CPU sees it at <strong>XIP address</strong> <code>0x90000000</code>
-      (after memory-mapped mode is enabled).
+      The <strong>application</strong> is on external <strong>W25Q64</strong>: program at chip offset
+      <code>0x00000000</code>; execute at <strong>XIP</strong> <code>0x90000000</code> after memory-mapped mode.
     </p>
     <p>
-      On every boot, the bootloader reads a <strong><code>write_bin</code> flag</strong>:
+      The load request is a single word in <strong>Backup SRAM</strong> @ <code>0x38800000</code> (survives soft reset):
     </p>
     <ul>
-      <li><strong>Flag ON</strong> — Program a new application binary into external flash (indirect QSPI mode), clear the flag, turn memory-mapped mode back on, then <strong>soft reset</strong> so the bootloader runs again cleanly.</li>
-      <li><strong>Flag OFF</strong> — Enable memory-mapped mode, check that a valid vector table exists at <code>0x90000000</code>, then <strong>jump</strong> into the application.</li>
+      <li><strong><code>1</code></strong> — Run <code>qspi_new_app_load()</code> (program external flash; stub shows LCD then reset today).</li>
+      <li><strong><code>0</code></strong> — LCD “Jump to app” → mmap → validate @ <code>0x90000000</code> → jump if valid; else bootloader poll (PE3 heartbeat).</li>
     </ul>
     <p>
-      After a successful flash, you use a <strong>soft reset</strong> (not a direct jump) so peripherals and NVIC state
-      are left in a known state; on the <em>next</em> boot the flag is already OFF and the normal jump path runs.
+      In the idle loop, <code>uart_recv_string()</code> (<code>Peripherals/UART1/uart_mcal</code>) receives host text.
+      If the string is <strong><code>SP</code></strong>, firmware calls <code>app_load_enable()</code> then
+      <code>qspi_new_app_load()</code> → clear flag → <strong>soft reset</strong> (stub today).
+    </p>
+    <p>
+      Host tool: <code>tools/saptashri_flash.py</code> (see <a href="README.md#host-flash-tool--saptashri_flashpy">README</a>).
+      Full protocol: <code>SP</code> + 4-byte size, ACK <code>0x79</code>, 256-byte chunks — planned inside <code>qspi_new_app_load()</code>.
     </p>
   </section>
 
   <section>
-    <h2 style="margin-top:0;border:none;color:var(--text);">Memory map</h2>
-    <table>
-      <thead>
-        <tr><th>Region</th><th>Address (CPU view)</th><th>Size</th><th>Role</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Internal FLASH</td>
-          <td><code>0x08000000</code> …</td>
-          <td>128 KB</td>
-          <td><strong>QSPI bootloader</strong> (this project, always runs first)</td>
-        </tr>
-        <tr>
-          <td>External flash offset</td>
-          <td><code>0x00000000</code> … <code>0x007FFFFF</code></td>
-          <td>8 MB</td>
-          <td>Application image (programming / erase use this offset)</td>
-        </tr>
-        <tr>
-          <td>QSPI XIP (memory-mapped)</td>
-          <td><code>0x90000000</code> … <code>0x907FFFFF</code></td>
-          <td>8 MB</td>
-          <td>Same bytes as above — CPU fetch &amp; jump address</td>
-        </tr>
-      </tbody>
-    </table>
+    <h2>Memory map</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Region</th><th>Address</th><th>Size</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Internal FLASH</td>
+            <td><code>0x08000000</code> … <code>0x0801FFFF</code></td>
+            <td>128 KB</td>
+            <td><strong>Bootloader</strong> (this project)</td>
+          </tr>
+          <tr>
+            <td>Backup SRAM</td>
+            <td><code>0x38800000</code> … <code>0x38800FFF</code></td>
+            <td>4 KB</td>
+            <td>Load flag word0: <strong>1</strong> = load, <strong>0</strong> = run</td>
+          </tr>
+          <tr>
+            <td>External flash offset</td>
+            <td><code>0x00000000</code> … <code>0x007FFFFF</code></td>
+            <td>8 MB</td>
+            <td>Application image (QSPI program/erase)</td>
+          </tr>
+          <tr>
+            <td>QSPI XIP</td>
+            <td><code>0x90000000</code> … <code>0x907FFFFF</code></td>
+            <td>8 MB</td>
+            <td>Same image — CPU fetch &amp; jump</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <section>
-    <h2 style="margin-top:0;border:none;color:var(--text);">Your six rules (numbered plan)</h2>
+    <h2>Six rules (boot plan)</h2>
     <ol class="steps">
-      <li><strong>Bootloader default address</strong> — Link and run from internal flash <code>0x08000000</code> (128&nbsp;KB). CubeIDE linker: <code>STM32H750VBTX_FLASH.ld</code>.</li>
-      <li><strong>Always check <code>write_bin</code> flag first</strong> — Before jump or flash logic, read persistent flag (RTC backup, backup SRAM, or dedicated flash sector — TBD in implementation).</li>
-      <li><strong>If flag enabled</strong> — Call <code>QSPI_Flash_DisableMemoryMappedMode()</code> so the QSPI peripheral can use indirect program/erase commands.</li>
-      <li><strong>If memory-mapped mode is off</strong> — Write application <code>.bin</code> to external flash starting at offset <code>0x00000000</code> via <code>QSPI_Flash_Erase*</code> + <code>QSPI_Flash_Write</code>.</li>
-      <li><strong>Normal boot (flag OFF)</strong> — Enable memory-mapped mode, validate vector table at <code>0x90000000</code>, <code>qspi_app_jump_to_application()</code>.</li>
-      <li><strong>After flash complete (flag was ON)</strong> — Clear <code>write_bin</code>, enable memory-mapped mode, then <strong>soft reset</strong> (<code>NVIC_SystemReset()</code>). Bootloader runs again; flag is OFF → step 5 path → jump to app.</li>
+      <li><strong>Bootloader @ 0x08000000</strong> — Linker <code>STM32H750VBTX_FLASH.ld</code>, 128&nbsp;KB.</li>
+      <li><strong>Check flag first</strong> — <code>app_load_is_enabled()</code> / <code>app_load_is_disabled()</code> on Backup SRAM @ <code>0x38800000</code>.</li>
+      <li><strong>Flag = 1</strong> — <code>qspi_new_app_load()</code>: today LCD stub 5&nbsp;s → <code>app_load_disable()</code> → reset; later QSPI erase/write @ 0.</li>
+      <li><strong>Flag = 0</strong> — LCD “Jump to app” → mmap + validate; if OK → <code>qspi_app_jump_to_application()</code>; if not → bootloader poll (PE3).</li>
+      <li><strong>While loop</strong> — PE3 heartbeat; <code>uart_recv_string</code> + <code>strcmp(..., "SP")</code> → <code>app_load_enable()</code> + <code>qspi_new_app_load()</code>; or if flag already <strong>1</strong>, call load.</li>
+      <li><strong>After real program</strong> — Disable mmap → program → <code>app_load_disable()</code> → mmap on → soft reset; next boot flag 0 → jump.</li>
     </ol>
     <div class="note">
-      <strong>Note on step 5 vs 6:</strong> After programming, use <em>soft reset</em> (step 6), not an immediate jump.
-      The second boot performs validation and jump with a clean core state.
+      <strong>Deferred:</strong> Internal flash sector 7 and external QSPI last-sector flags were removed — they conflicted with ST-LINK debug when tested from <code>main</code> every boot.
     </div>
   </section>
 
   <section>
-    <h2 style="margin-top:0;border:none;color:var(--text);">Flow chart</h2>
-    <div class="mermaid">
+    <h2>Boot flow chart</h2>
+    <div class="legend">
+      <span><i class="dot-done"></i> Implemented today</span>
+      <span><i class="dot-plan"></i> Planned (dashed in diagram)</span>
+    </div>
+    <div class="diagram-wrap flow-primary mermaid-pending" id="flow-boot">
+      <pre class="mermaid">
 flowchart TD
-    A([Power-on / Reset]) --> B[Bootloader @ 0x08000000]
-    B --> C[HAL + QSPI + LCD init]
-    C --> D{write_bin flag?}
+    reset([Power-on or soft reset])
+    bl[Bootloader at 0x08000000]
+    periph[MX_GPIO QUADSPI SPI4 TIM1 USART1]
+    lcdHi[LCD welcome Saptashri Secure XIP]
+    flag{Flag word0 at 0x38800000}
 
-    D -->|ENABLED| E[Disable memory-mapped mode]
-    E --> F[Erase + write app.bin @ flash offset 0x00000000]
-    F --> G[Clear write_bin flag]
-    G --> H[Enable memory-mapped mode]
-    H --> I[NVIC_SystemReset - soft reset]
+    reset --> bl
+    bl --> periph
+    periph --> lcdHi
+    lcdHi --> flag
 
-    I --> B
+    flag -->|equals 1| loadStub["qspi_new_app_load stub LCD 5s"]
+    loadStub --> clr[app_load_disable writes 0]
+    clr --> softRst[NVIC_SystemReset]
+    softRst --> bl
 
-    D -->|DISABLED| J[Enable memory-mapped mode]
-    J --> K{Valid app @ 0x90000000?}
-    K -->|Yes| L[qspi_app_jump_to_application]
-    L --> M([Application running])
-    K -->|No| N([Stay in bootloader / error UI])
+    flag -->|equals 0| lcdOff[LCD App load OFF Jump to app]
+    lcdOff --> mmapJump[Enable mmap validate jump]
+    mmapJump --> valid{Valid app at 0x90000000}
+    valid -->|Yes| xipJump[qspi_app_jump_to_application]
+    xipJump --> appAddr([Application at 0x90000000])
+    appAddr --> appRun([Application running])
+    valid -->|No| idle[Idle PE3 heartbeat uart_recv_string]
+    idle -->|host sends SP| spTrig[app_load_enable]
+    spTrig --> loadStub
+    idle -->|flag becomes 1| loadStub
+
+    flag -->|invalid| fix[LCD invalid app_load_disable]
+    fix --> lcdOff
+
+    classDef done fill:#1a3d2e,stroke:#3fb950,color:#e6edf3
+    classDef plan fill:#2a2438,stroke:#a371f7,color:#e6edf3,stroke-dasharray:5 5
+    class bl,periph,lcdHi,flag,loadStub,clr,softRst,lcdOff,idle,spTrig,fix done
+    class mmapJump,valid,xipJump,appAddr,appRun plan
+      </pre>
     </div>
+    <p style="font-size:0.88rem;color:var(--muted);margin:0.5rem 0 0;">
+      Solid green: implemented today (welcome LCD, flag branch, load stub, idle PE3 + UART <code>SP</code> trigger).
+      Purple dashed: planned (mmap + validate + jump on flag&nbsp;0; real QSPI program + ACK protocol on flag&nbsp;1).
+      Flag&nbsp;0 path: LCD “Jump to app” → validate → run app or stay in bootloader with heartbeat and UART poll.
+    </p>
   </section>
 
   <section>
-    <h2 style="margin-top:0;border:none;color:var(--text);">Sequence — flash update path</h2>
-    <div class="mermaid">
+    <h2>Sequence — flash update path</h2>
+    <div class="diagram-wrap mermaid-pending" id="flow-seq">
+      <pre class="mermaid">
 sequenceDiagram
-    participant Host as Host / tool
-    participant BL as Bootloader 0x08000000
+    participant Host as Host or tool
+    participant BK as Backup SRAM 0x38800000
+    participant BL as Bootloader
     participant QSPI as W25Q64 driver
     participant EXT as External flash
 
-    Host->>BL: Set write_bin flag + provide bin
-    BL->>BL: Reset
-    BL->>BL: read write_bin = ON
-    BL->>QSPI: DisableMemoryMappedMode
-    BL->>QSPI: Erase + Write @ 0x00000000
-    QSPI->>EXT: Program application
-    BL->>BL: write_bin = OFF
-    BL->>QSPI: EnableMemoryMappedMode
+    Host->>BL: USART1 send SP trigger done today
+    BL->>BL: app_load_enable
+    BL->>BL: qspi_new_app_load stub LCD
+    Note over Host,BL: Planned SP plus 4 byte size ACK 0x79 chunks
+    BL->>BK: app_load_disable writes 0
     BL->>BL: NVIC_SystemReset
-    BL->>BL: read write_bin = OFF
-    BL->>QSPI: EnableMemoryMappedMode
-    BL->>BL: Jump to 0x90000000
+    Note over BL,BK: Next boot flag 0
+    BL->>BK: Read flag equals 0
+    BL->>QSPI: EnableMemoryMappedMode planned
+    BL->>BL: Jump to 0x90000000 planned
+      </pre>
     </div>
   </section>
 
   <section>
-    <h2 style="margin-top:0;border:none;color:var(--text);">Proof — mapping to this repository</h2>
+    <h2>Repository mapping</h2>
     <dl class="proof">
       <dt>1 — Bootloader @ 0x08000000</dt>
-      <dd>Linker script <code>STM32H750VBTX_FLASH.ld</code>: <code>FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 128K</code></dd>
+      <dd><code>STM32H750VBTX_FLASH.ld</code>: <code>FLASH ORIGIN = 0x08000000, LENGTH = 128K</code></dd>
 
-      <dt>2 — write_bin flag</dt>
-      <dd><em>To implement.</em> Suggested: RTC backup register (survives reset) or last 4&nbsp;KB of internal flash. Magic + flag byte + optional CRC.</dd>
+      <dt>2 — Load flag (Backup SRAM)</dt>
+      <dd><code>Features/app_shared_ram/</code> — <code>app_load_enable</code>, <code>app_load_disable</code>, <code>app_load_is_enabled</code>, <code>app_load_is_disabled</code> @ <code>0x38800000</code> (values <strong>1</strong> / <strong>0</strong>).</dd>
 
-      <dt>3 — Disable memory-mapped mode</dt>
-      <dd><code>QSPI_Flash_DisableMemoryMappedMode(&amp;hqspi)</code> in <code>Peripherals/QSPI_Flash/Src/qspi_flash.c</code></dd>
+      <dt>3 — App load session</dt>
+      <dd><code>Features/qspi_app_load/</code> — <code>qspi_new_app_load()</code> (stub: LCD 5&nbsp;s, disable flag, reset). Planned: mmap off + erase/write.</dd>
 
-      <dt>4 — Write app @ offset 0</dt>
-      <dd><code>QSPI_Flash_EraseSector</code> / <code>QSPI_Flash_Write</code> with <code>Address = 0x00000000</code> (see <code>EXT_START_ADDR</code> in <code>Core/Src/main.c</code>)</dd>
+      <dt>4 — QSPI driver</dt>
+      <dd><code>Peripherals/QSPI_Flash/</code> — <code>QSPI_Flash_DisableMemoryMappedMode</code>, erase, write, mmap on.</dd>
 
-      <dt>5 — Jump when flag OFF</dt>
-      <dd><code>QSPI_Flash_EnableMemoryMappedMode</code> → <code>qspi_app_is_valid(0x90000000)</code> → <code>qspi_app_jump_to_application</code> in <code>Features/qspi_app_jump/src/qspi_app_jump.c</code></dd>
+      <dt>5 — Jump when flag 0</dt>
+      <dd><code>Features/qspi_app_jump/</code> — <code>qspi_app_is_valid</code>, <code>qspi_app_jump_to_application</code> (not called from <code>main.c</code> yet).</dd>
 
-      <dt>6 — Soft reset after flash</dt>
-      <dd><code>NVIC_SystemReset()</code> (already stubbed as <code>system_reset()</code> in <code>Core/Src/main.c</code>)</dd>
+      <dt>6 — Soft reset</dt>
+      <dd><code>system_reset()</code> in <code>Core/Src/main.c</code>; also <code>NVIC_SystemReset()</code> inside <code>qspi_new_app_load()</code>.</dd>
+
+      <dt>7 — USART1 MCAL</dt>
+      <dd><code>Peripherals/UART1/</code> — <code>uart_mcal</code>: <code>uart_send_*</code>, <code>uart_recv_*</code>, <code>uart_recv_string</code> (returns byte count; <code>main.c</code> compares to <code>"SP"</code>).</dd>
+
+      <dt>8 — Host flash tool</dt>
+      <dd><code>tools/saptashri_flash.py</code> — <code>SP</code> + size + chunked program @ offset 0; documented in <a href="README.md">README.md</a>.</dd>
+
+      <dt>9 — Idle UART in main</dt>
+      <dd><code>Core/Src/main.c</code> — <code>while(1)</code>: <code>uart_recv_string</code> then <code>strcmp</code> for <code>SP</code> → load path.</dd>
     </dl>
   </section>
 
   <section>
-    <h2 style="margin-top:0;border:none;color:var(--text);">Implementation checklist</h2>
-    <table>
-      <thead><tr><th>Item</th><th>Status</th></tr></thead>
-      <tbody>
-        <tr><td>Bootloader linked at 0x08000000</td><td style="color:var(--ok)">Done</td></tr>
-        <tr><td>QSPI driver (erase / write / mmap)</td><td style="color:var(--ok)">Done</td></tr>
-        <tr><td>App jump helper</td><td style="color:var(--ok)">Done</td></tr>
-        <tr><td><code>write_bin</code> flag storage + API</td><td style="color:var(--warn)">Planned</td></tr>
-        <tr><td>Boot state machine in <code>main.c</code></td><td style="color:var(--warn)">Planned</td></tr>
-        <tr><td>Remove test string write @ offset 0 (conflicts with app vectors)</td><td style="color:var(--warn)">Required before production</td></tr>
-        <tr><td>External app linker @ 0x90000000</td><td style="color:var(--warn)">Separate project</td></tr>
-      </tbody>
-    </table>
+    <h2>Pin map (hardware)</h2>
+    <p style="margin-top:0;color:var(--muted);font-size:0.9rem;">
+      Must match <code>STM32H7xx_QSPI.ioc</code> and <code>stm32h7xx_hal_msp.c</code>. Same tables as <a href="README.md#hardware">README.md</a>.
+    </p>
+    <h3 style="font-size:1rem;color:var(--accent-soft);margin:1rem 0 0.5rem;">QSPI — Winbond W25Q64</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>QSPI signal</th><th>MCU pin</th><th>User label</th><th>AF</th><th>GPIO speed</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>QUADSPI_CLK</code></td><td><strong>PB2</strong></td><td>—</td><td><code>AF9</code></td><td><code>VERY_HIGH</code></td></tr>
+          <tr><td><code>QUADSPI_BK1_NCS</code></td><td><strong>PB6</strong></td><td>locked</td><td><code>AF10</code></td><td><code>VERY_HIGH</code></td></tr>
+          <tr><td><code>QUADSPI_BK1_IO0</code></td><td><strong>PD11</strong></td><td>—</td><td><code>AF9</code></td><td><code>VERY_HIGH</code></td></tr>
+          <tr><td><code>QUADSPI_BK1_IO1</code></td><td><strong>PD12</strong></td><td>—</td><td><code>AF9</code></td><td><code>VERY_HIGH</code></td></tr>
+          <tr><td><code>QUADSPI_BK1_IO2</code></td><td><strong>PE2</strong></td><td>—</td><td><code>AF9</code></td><td><code>VERY_HIGH</code></td></tr>
+          <tr><td><code>QUADSPI_BK1_IO3</code></td><td><strong>PD13</strong></td><td>locked</td><td><code>AF9</code></td><td><code>VERY_HIGH</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note" style="margin-top:0.75rem;">
+      <strong>NCS / IO3:</strong> CubeMX defaults <code>PB10</code> / <code>PA1</code> are wrong for WeAct — use <code>PB6</code> / <code>PD13</code>.
+    </div>
+    <h3 style="font-size:1rem;color:var(--accent-soft);margin:1.25rem 0 0.5rem;">TFT LCD — ST7735 (SPI4 + TIM1)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Signal</th><th>MCU pin</th><th>User label</th><th>Mode / AF</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>SPI4_MISO</code></td><td><strong>PE5</strong></td><td>—</td><td><code>AF5_SPI4</code></td></tr>
+          <tr><td><code>SPI4_SCK</code></td><td><strong>PE12</strong></td><td>—</td><td><code>AF5_SPI4</code></td></tr>
+          <tr><td><code>SPI4_MOSI</code></td><td><strong>PE14</strong></td><td>—</td><td><code>AF5_SPI4</code></td></tr>
+          <tr><td>LCD CS</td><td><strong>PE11</strong></td><td><code>LCD_CS</code></td><td>GPIO out</td></tr>
+          <tr><td>LCD DC/RS</td><td><strong>PE13</strong></td><td><code>LCD_WR_RS</code></td><td>GPIO out</td></tr>
+          <tr><td>Backlight PWM</td><td><strong>PE10</strong></td><td>locked</td><td><code>TIM1_CH2N</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 style="font-size:1rem;color:var(--accent-soft);margin:1.25rem 0 0.5rem;">USART1 (host / USB‑VCP)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Signal</th><th>MCU pin</th><th>AF</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>USART1_TX</code></td><td><strong>PB14</strong></td><td><code>AF4_USART1</code></td><td>115200 8N1</td></tr>
+          <tr><td><code>USART1_RX</code></td><td><strong>PB15</strong></td><td><code>AF4_USART1</code></td><td>Host <code>SP</code> trigger</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 style="font-size:1rem;color:var(--accent-soft);margin:1.25rem 0 0.5rem;">Other</h3>
+    <div class="table-wrap">
+      <table>
+        <tbody>
+          <tr><td>Heartbeat LED</td><td><strong>PE3</strong></td><td>Idle loop toggle in <code>main.c</code></td></tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
-  <footer>
-    Open this file in any browser. Diagrams use Mermaid (CDN). Project: STM32H7xx_qspi_flash.
+  <section>
+    <h2>Host UART protocol (<code>saptashri_flash.py</code>)</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Step</th><th>Host</th><th>Bootloader</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><code>SP</code> + 4-byte LE <strong>size</strong></td><td><code>app_load_enable()</code>, <code>qspi_new_app_load()</code></td><td style="color:var(--warn)"><code>SP</code> only today</td></tr>
+          <tr><td>2</td><td>Wait</td><td>QSPI init, mmap off, sector erase</td><td style="color:var(--planned)">Planned</td></tr>
+          <tr><td>3</td><td>Wait</td><td>ACK <code>0x79</code> — ready for data</td><td style="color:var(--planned)">Planned</td></tr>
+          <tr><td>4</td><td>≤256 B chunk</td><td>Write @ <code>0x0</code>, ACK per chunk</td><td style="color:var(--planned)">Planned</td></tr>
+          <tr><td>5</td><td>—</td><td>mmap on, flag 0, reset → app @ <code>0x90000000</code></td><td style="color:var(--planned)">Planned</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:0.88rem;color:var(--muted);margin:0.75rem 0 0;">
+      Install: <code>pip install -r tools/requirements.txt</code> ·
+      Run: <code>python tools/saptashri_flash.py -p COMx app.bin</code>
+    </p>
+  </section>
+
+  <section>
+    <h2>Implementation checklist</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Item</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Bootloader linked at 0x08000000</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>QSPI driver (erase / write / mmap)</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>App jump helper</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td><code>app_shared_ram</code> flag (1 / 0) + API</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>LCD welcome + flag status screen</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td><code>qspi_new_app_load()</code> stub</td><td style="color:var(--ok)">Done (stub)</td></tr>
+          <tr><td>While-loop flag poll</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td><code>Peripherals/UART1</code> <code>uart_mcal</code></td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>Host UART <code>SP</code> trigger (idle loop)</td><td style="color:var(--ok)">Done (stub load)</td></tr>
+          <tr><td>Real QSPI program in <code>qspi_new_app_load</code></td><td style="color:var(--planned)">Planned</td></tr>
+          <tr><td>Host UART size + ACK + chunk program</td><td style="color:var(--planned)">Planned</td></tr>
+          <tr><td>Jump when flag 0</td><td style="color:var(--planned)">Planned</td></tr>
+          <tr><td><code>QSPI_Flash_Init</code> in boot path</td><td style="color:var(--planned)">Planned</td></tr>
+          <tr><td>Internal / QSPI flag modules</td><td style="color:var(--muted)">Removed</td></tr>
+          <tr><td>External app linker @ 0x90000000</td><td style="color:var(--warn)">Separate project</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  </main>
+
+  <footer class="page-wrap">
+    Saptashri Secure XIP Bootloader · Open in any browser · Mermaid 10 (CDN)<br />
+    <code>STM32H7xx_qspi_flash/external_bootloader_plan.html</code>
   </footer>
 
   <script>
     mermaid.initialize({
-      startOnLoad: true,
+      startOnLoad: false,
       theme: "dark",
-      flowchart: { curve: "basis" }
+      securityLevel: "loose",
+      flowchart: {
+        curve: "basis",
+        htmlLabels: false,
+        useMaxWidth: true
+      },
+      sequence: { useMaxWidth: true }
     });
+
+    function markDiagramReady(wrap) {
+      wrap.classList.remove("mermaid-pending");
+      wrap.classList.add("mermaid-ready");
+    }
+
+    function applyDiagramAnimations(wrap) {
+      var svg = wrap.querySelector("svg");
+      if (!svg) return;
+
+      var nodes = svg.querySelectorAll("g.node");
+      var nodeCount = nodes.length;
+      var baseDelay = 0.07;
+
+      nodes.forEach(function (node, i) {
+        var delay = (i * baseDelay) + "s";
+        if (node.querySelector("polygon")) {
+          node.classList.add("anim-decision");
+          node.style.animationDelay = delay + ", " + (nodeCount * baseDelay + 0.6) + "s";
+        } else {
+          node.classList.add("anim-node");
+          node.style.animationDelay = delay;
+        }
+      });
+
+      svg.querySelectorAll(".edgePath path.path, path.flowchart-link").forEach(function (path, i) {
+        path.classList.add("anim-edge");
+        path.style.animationDelay = (i * 0.04) + "s";
+      });
+
+      if (wrap.id === "flow-seq") {
+        svg.querySelectorAll(".actor, .messageLine0, .messageText").forEach(function (el, i) {
+          el.style.animationDelay = (i * 0.06) + "s";
+        });
+      }
+    }
+
+    async function renderDiagrams() {
+      var blocks = document.querySelectorAll("pre.mermaid");
+      for (var i = 0; i < blocks.length; i++) {
+        var pre = blocks[i];
+        var wrap = pre.closest(".diagram-wrap");
+        try {
+          var id = "mmd-" + i;
+          var graphDef = pre.textContent.trim();
+          var renderOut = await mermaid.render(id, graphDef);
+          pre.remove();
+          var outer = document.createElement("div");
+          outer.className = "mermaid";
+          var canvas = document.createElement("div");
+          canvas.className = "mermaid-canvas";
+          canvas.innerHTML = renderOut.svg;
+          outer.appendChild(canvas);
+          wrap.appendChild(outer);
+          if (typeof renderOut.bindFunctions === "function") {
+            renderOut.bindFunctions(canvas);
+          }
+          markDiagramReady(wrap);
+          requestAnimationFrame(function () {
+            applyDiagramAnimations(wrap);
+          });
+        } catch (e) {
+          wrap.classList.remove("mermaid-pending");
+          wrap.innerHTML = "<p style='color:#f778ba;padding:1rem'>Diagram error: " + e.message + "</p>";
+        }
+      }
+    }
+
+    function initPage() {
+      renderDiagrams();
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initPage);
+    } else {
+      initPage();
+    }
   </script>
 </body>
 </html>
