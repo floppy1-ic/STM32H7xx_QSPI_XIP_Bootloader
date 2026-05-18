@@ -10,7 +10,6 @@
 #ifndef UART_MCAL_H
 #define UART_MCAL_H
 
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include "stm32h7xx_hal.h"
@@ -24,9 +23,6 @@ extern "C" {
 
 /** Short timeout (ms) for idle-loop UART poll (no byte available). */
 #define UART_MCAL_POLL_TIMEOUT_MS  10U
-
-/** Host load trigger bytes (see tools/saptashri_flash.py). */
-#define UART_MCAL_LOAD_TRIGGER     "SP"
 
 /**
   * @brief  Transmit one character on USART1.
@@ -59,15 +55,11 @@ HAL_StatusTypeDef uart_recv_char_timeout(char *c, uint32_t timeout_ms);
 
 /**
   * @brief  Receive characters until newline, buffer full, or per-byte poll timeout.
-  *
-  * Null-terminates @p buff. Returns true only when exactly two bytes were received
-  * and buff[0]=='S', buff[1]=='P'; any other input is ignored (returns false).
-  *
-  * @param  buff  Destination buffer; must not be NULL; size >= 3 recommended.
-  * @param  size  Total buffer size in bytes (including NUL).
-  * @retval true if load trigger "SP" was received, false otherwise.
+  * @param  buff  Destination buffer (NUL-terminated).
+  * @param  size  Buffer size in bytes (including NUL).
+  * @retval Number of characters received (excluding NUL), or 0 if none.
   */
-bool uart_recv_string(char *buff, size_t size);
+uint32_t uart_recv_string(char *buff, size_t size);
 
 #ifdef __cplusplus
 }

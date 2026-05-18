@@ -53,14 +53,14 @@ HAL_StatusTypeDef uart_recv_char(char *c)
   return uart_recv_char_timeout(c, UART_MCAL_IO_TIMEOUT_MS);
 }
 
-bool uart_recv_string(char *buff, size_t size)
+uint32_t uart_recv_string(char *buff, size_t size)
 {
   uint32_t count = 0U;
   char ch;
 
-  if ((buff == NULL) || (size < 3U))
+  if ((buff == NULL) || (size < 2U))
   {
-    return false;
+    return 0U;
   }
 
   buff[0] = '\0';
@@ -86,12 +86,5 @@ bool uart_recv_string(char *buff, size_t size)
   }
 
   buff[count] = '\0';
-
-  while ((count > 0U) && ((buff[count - 1U] == '\r') || (buff[count - 1U] == '\n')))
-  {
-    buff[count - 1U] = '\0';
-    count--;
-  }
-
-  return (count == 2U) && (buff[0] == 'S') && (buff[1] == 'P');
+  return count;
 }
