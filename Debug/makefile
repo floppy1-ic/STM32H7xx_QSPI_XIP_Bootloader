@@ -9,6 +9,7 @@ RM := rm -rf
 
 # All of the sources participating in the build are defined here
 -include sources.mk
+-include Peripherals/UART1/Src/subdir.mk
 -include Peripherals/SPI4_LCD/Src/subdir.mk
 -include Peripherals/QSPI_Flash/Src/subdir.mk
 -include Features/qspi_app_load/src/subdir.mk

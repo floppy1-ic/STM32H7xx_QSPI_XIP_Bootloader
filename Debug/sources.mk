@@ -32,4 +32,5 @@ Features/qspi_app_jump/src \
 Features/qspi_app_load/src \
 Peripherals/QSPI_Flash/Src \
 Peripherals/SPI4_LCD/Src \
+Peripherals/UART1/Src \
 
