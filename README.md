@@ -18,7 +18,7 @@ STM32H7xx_qspi_flash/
 ├── Peripherals/
 │   ├── QSPI_Flash/                 W25Q64 driver (erase / write / mmap)
 │   ├── SPI4_LCD/                   ST7735 + TIM1 backlight
-│   └── UART1/                      USART1 MCAL (PA9/PA10)
+│   └── UART1/                      USART1 MCAL (PB14/PB15)
 ├── tools/
 │   ├── saptashri_flash.py          Host UART flash tool
 │   └── requirements.txt
@@ -58,7 +58,7 @@ Survives **soft reset** (`NVIC_SystemReset` / `system_reset()` in `main.c`). Cle
 
 ## Boot flow (as implemented in `main.c`)
 
-1. CubeMX init (GPIO, QSPI, SPI4, TIM1).
+1. CubeMX init (GPIO, QSPI, SPI4, TIM1, USART1).
 2. LCD welcome: **Saptashri Secure / XIP Bootloader**.
 3. Read flag:
    - **1** → `qspi_new_app_load()` (does not return).
@@ -70,7 +70,7 @@ Survives **soft reset** (`NVIC_SystemReset` / `system_reset()` in `main.c`). Cle
 
 Today (`Features/qspi_app_load`):
 
-1. LCD: **At app load (Stub)** for 5 s.
+1. LCD: **App load : Wait...** then stub delay.
 2. `app_load_disable()` → flag **0**.
 3. `NVIC_SystemReset()`.
 
@@ -85,12 +85,127 @@ Today (`Features/qspi_app_load`):
 
 ---
 
+## Host flash tool (`tools/`)
+
+1. Bootloader running (PE3 heartbeat in idle).
+2. `python tools/saptashri_flash.py -p COM5 app.bin` sends **`SP`+size**, then **256-byte** chunks with **ACK** handshake.
+3. Image programs @ **`0x00000000`**; MCU resets with mmap → app @ **`0x90000000`**.
+
+See **[Host flash tool — detail](#host-flash-tool--saptashri_flashpy)** below.
+
+---
+
+## Build (STM32CubeIDE)
+
+- Target: **STM32H750VBTx**, project **STM32H7xx_QSPI**.
+- Add include paths if a new `Features/*/inc` or `Peripherals/*/Inc` folder is added:
+  - `../Features/app_shared_ram/inc`
+  - `../Features/qspi_app_load/inc`
+  - `../Features/qspi_app_jump/inc`
+  - `../Peripherals/UART1/Inc`
+- After **Generate Code**, verify `Debug/**/subdir.mk` still lists those `-I` paths (Cube sometimes regenerates makefiles without them).
+
+---
+
+## Hardware
+
+| Item | Detail |
+|------|--------|
+| MCU | STM32H750VBTx (MiniSTM32H750 / WeAct) |
+| External flash | W25Q64 on QUADSPI BK1 — see pin table below |
+| LCD | ST7735 on SPI4 + TIM1 backlight — see pin table below |
+| UART | USART1 **PB14/PB15**, 115200 8N1 — see pin table below |
+| Heartbeat LED | **PE3** |
+
+Pin assignments must match **`STM32H7xx_QSPI.ioc`** and `stm32h7xx_hal_msp.c`.
+
+### QSPI — Winbond W25Q64
+
+| Item | Value |
+|------|--------|
+| **MCU** | STM32H750VBTx |
+| **Peripheral** | QUADSPI (BK1, single flash) |
+| **Flash IC** | **Winbond W25Q64** (8 MByte external NOR) |
+
+| QSPI signal | MCU pin | CubeMX User Label | Alternate function | GPIO max speed |
+|-------------|---------|-------------------|--------------------|----------------|
+| `QUADSPI_CLK` | **PB2** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
+| `QUADSPI_BK1_NCS` | **PB6** | _(none, locked)_ | `GPIO_AF10_QUADSPI` | `VERY_HIGH` |
+| `QUADSPI_BK1_IO0` | **PD11** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
+| `QUADSPI_BK1_IO1` | **PD12** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
+| `QUADSPI_BK1_IO2` | **PE2** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
+| `QUADSPI_BK1_IO3` | **PD13** | _(none, locked)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
+
+> **NCS / IO3:** CubeMX defaults are `PB10` (NCS) and `PA1` (IO3) — **wrong** for this board. Use **`PB6`** and **`PD13`** (locked in `.ioc`). Wrong pins → ReadID `0x00 0x00 0x00`.
+
+### TFT LCD — ST7735 (SPI4)
+
+| Item | Value |
+|------|--------|
+| **Panel / controller** | **ST7735** family (SPI RGB TFT) |
+| **MCU data bus** | **SPI4** (8-bit, software NSS; CS/DC on GPIO) |
+| **Backlight** | **TIM1** channel 2 complementary output (**TIM1_CH2N** on **PE10**) |
+
+| LCD / bus signal | MCU pin | CubeMX User Label | Mode / alternate function | GPIO max speed |
+|------------------|---------|-------------------|---------------------------|----------------|
+| `SPI4_MISO` | **PE5** | _(none)_ | `GPIO_AF5_SPI4` | `VERY_HIGH` |
+| `SPI4_SCK` | **PE12** | _(none)_ | `GPIO_AF5_SPI4` | `VERY_HIGH` |
+| `SPI4_MOSI` | **PE14** | _(none)_ | `GPIO_AF5_SPI4` | `VERY_HIGH` |
+| LCD chip select (CS) | **PE11** | **`LCD_CS`** | `GPIO_Output` | `LOW` |
+| Data / command (DC, RS) | **PE13** | **`LCD_WR_RS`** | `GPIO_Output` | `LOW` |
+| Backlight PWM | **PE10** | _(none, locked)_ | `GPIO_AF1_TIM1` (TIM1_CH2N) | `LOW` |
+
+> User Labels **`LCD_CS`** / **`LCD_WR_RS`** generate `LCD_CS_Pin` / `LCD_WR_RS_Pin` in `main.h` — do not rename in CubeMX without updating the LCD driver.
+
+### USART1 (host UART / USB‑VCP)
+
+| USART1 signal | MCU pin | Alternate function | Notes |
+|---------------|---------|--------------------|--------|
+| `USART1_TX` | **PB14** | `GPIO_AF4_USART1` | To USB‑serial bridge on WeAct board |
+| `USART1_RX` | **PB15** | `GPIO_AF4_USART1` | 115200 8N1 |
+
+### Other GPIO
+
+| Signal | MCU pin | Notes |
+|--------|---------|--------|
+| Heartbeat LED | **PE3** | Toggled in `main.c` idle loop |
+
+### WeAct board quick reference
+
+| Area | WeAct / board | This project (`.ioc`) |
+|------|---------------|------------------------|
+| QSPI flash | W25Q64, `PB2` CLK, `PB6` NCS, `PD11`–`PD13`, `PE2` IO2 | Matches |
+| LCD SPI4 | `PE5` MISO, `PE12` SCK, `PE14` MOSI | Matches |
+| LCD CS / DC | `PE11` / `PE13` | User Labels `LCD_CS`, `LCD_WR_RS` |
+| LCD backlight | `PE10` TIM1_CH2N | Matches |
+| USART1 | Board USB‑VCP | **PB14** TX, **PB15** RX |
+
+---
+
+## Status summary
+
+| Item | Status |
+|------|--------|
+| Bootloader @ `0x08000000` | Done |
+| QSPI W25Q64 driver | Done |
+| `app_shared_ram` flag API | Done |
+| LCD welcome + flag display | Done |
+| `qspi_new_app_load()` stub | Done |
+| While-loop flag poll + reset | Done |
+| USART1 `uart_mcal` | Done |
+| Host UART `SP` trigger in idle loop | Done (stub load path) |
+| Real QSPI program in `qspi_new_app_load` | Planned |
+| Jump to app when flag 0 | Planned |
+| Host UART size + ACK + chunk program | Planned |
+
+---
+
 ## Host flash tool — `saptashri_flash.py`
 
 UART programming for **W25Q64** at flash offset **`0x00000000`**.  
 Bootloader enables **memory-mapped mode** and runs the app at **`0x90000000`** after reset.
 
-**Hardware:** USART1 **PA9/PA10** (WeAct USB‑VCP), **115200 8N1**.
+**Hardware:** USART1 **PB14/PB15** (WeAct USB‑VCP), **115200 8N1**.
 
 ### Install
 
@@ -110,7 +225,7 @@ pip install -r tools/requirements.txt
 
 No ST-LINK required for application updates.
 
-**Today:** idle loop recognizes **`SP`** on UART (`Peripherals/UART1`, `strcmp` in `main.c`). Full **size + ACK + chunk program** path in `qspi_new_app_load()` is still planned.
+**Firmware today:** idle loop recognizes **`SP`** on UART (`Peripherals/UART1`, `strcmp` in `main.c`). Full **size + ACK + chunk program** in `qspi_new_app_load()` is still planned.
 
 ### Usage
 
@@ -131,48 +246,6 @@ python tools/saptashri_flash.py -p COM5 --info app.hex
 | `Features/qspi_app_load/` | Erase, UART RX, `QSPI_Flash_Write` (stub / planned) |
 
 Internal bootloader @ `0x08000000`: flash once via CubeIDE / ST-LINK.
-
----
-
-## Build (STM32CubeIDE)
-
-- Target: **STM32H750VBTx**, project **STM32H7xx_QSPI**.
-- Add include paths if a new `Features/*/inc` folder is added:
-  - `../Features/app_shared_ram/inc`
-  - `../Features/qspi_app_load/inc`
-  - `../Features/qspi_app_jump/inc`
-  - `../Peripherals/UART1/Inc`
-- After **Generate Code**, verify `Debug/**/subdir.mk` still lists those `-I` paths (Cube sometimes regenerates makefiles without them).
-
----
-
-## Hardware
-
-| Item | Detail |
-|------|--------|
-| MCU | STM32H750VBTx (MiniSTM32H750 / WeAct) |
-| External flash | W25Q64 on QUADSPI BK1 (`PB2`, `PB6`, `PD11`–`PD13`, `PE2`) |
-| LCD | ST7735 on SPI4, backlight TIM1_CH2N **PE10** |
-| Heartbeat LED | **PE3** |
-
-See `Peripherals/QSPI_Flash` and `Peripherals/SPI4_LCD` sources and CubeMX `.ioc` for pin details.
-
----
-
-## Status summary
-
-| Item | Status |
-|------|--------|
-| Bootloader @ `0x08000000` | Done |
-| QSPI W25Q64 driver | Done |
-| `app_shared_ram` flag API | Done |
-| LCD welcome + flag display | Done |
-| `qspi_new_app_load()` stub | Done |
-| While-loop flag poll + reset | Done |
-| Real QSPI program in `qspi_new_app_load` | Planned |
-| Jump to app when flag 0 | Planned |
-| Host UART `SP` trigger in idle loop | Done (stub load path) |
-| Host UART size + ACK + chunk program | Planned |
 
 ---
 
