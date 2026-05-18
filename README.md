@@ -1,315 +1,181 @@
-# QSPI Flash Driver — STM32H750VBTx + Winbond W25Q64
+# Saptashri Secure XIP Bootloader — STM32H750VBTx
 
-This module is a small QSPI driver for the **Winbond W25Q64** flash on the
-**MiniSTM32H750VBTx** board. It is designed to live alongside CubeMX-generated code and
-relies on the QSPI peripheral being initialized by `MX_QUADSPI_Init()`.
+Bootloader in **128 KB internal flash** (`0x08000000`). Application image on external **Winbond W25Q64** (8 MB), executed from **XIP** `0x90000000` after memory-mapped mode.
+
+Full design (flowcharts, memory map, checklist): **[external_bootloader_plan.html](external_bootloader_plan.html)** — open in a browser.
+
+---
+
+## Project layout
 
 ```
-QSPI_Flash/
-├── Inc/qspi_flash.h    Public API + W25Q64 commands and geometry
-├── Src/qspi_flash.c    Driver implementation
-└── README.md           This file
+STM32H7xx_qspi_flash/
+├── Core/Src/main.c                 Boot flow, LCD, flag check, idle poll
+├── Features/
+│   ├── app_shared_ram/             Load flag in Backup SRAM (0 / 1)
+│   ├── qspi_app_load/              qspi_new_app_load() — stub today
+│   └── qspi_app_jump/              Jump to app @ 0x90000000 (ready, not wired in main)
+├── Peripherals/
+│   ├── QSPI_Flash/                 W25Q64 driver (erase / write / mmap)
+│   ├── SPI4_LCD/                   ST7735 + TIM1 backlight
+│   └── UART1/                      USART1 MCAL (PA9/PA10)
+├── tools/
+│   ├── saptashri_flash.py          Host UART flash tool
+│   └── requirements.txt
+├── external_bootloader_plan.html Design document
+└── STM32H750VBTX_FLASH.ld          Bootloader linker, 128 KB
 ```
 
 ---
 
-## Hardware summary (QSPI flash + TFT LCD)
+## Memory map
 
-### QSPI — Winbond W25Q64
+| Region | Address | Size | Role |
+|--------|---------|------|------|
+| Internal FLASH | `0x08000000` … `0x0801FFFF` | 128 KB | This bootloader |
+| Backup SRAM | `0x38800000` (word 0) | 4 KB | **Load flag:** `1` = program app, `0` = run app |
+| External flash | `0x00000000` … `0x007FFFFF` | 8 MB | Application binary (QSPI program) |
+| QSPI XIP | `0x90000000` … `0x907FFFFF` | 8 MB | Same image — CPU fetch / jump |
 
-| Item | Value |
+**Rejected for the flag:** internal flash sector and external QSPI last sector (debug / ST-LINK issues during bring-up).
+
+---
+
+## Load flag (`Features/app_shared_ram`)
+
+| API | Effect |
+|-----|--------|
+| `app_load_enable()` | Write **1** @ `0x38800000` |
+| `app_load_disable()` | Write **0** |
+| `app_load_is_enabled()` | `true` if **1** |
+| `app_load_is_disabled()` | `true` if **0** |
+
+Survives **soft reset** (`NVIC_SystemReset` / `system_reset()` in `main.c`). Cleared on full power-off unless backup domain is powered.
+
+**ST-LINK test:** Memory window @ `0x38800000` → `1` or `0`, then reset.
+
+---
+
+## Boot flow (as implemented in `main.c`)
+
+1. CubeMX init (GPIO, QSPI, SPI4, TIM1).
+2. LCD welcome: **Saptashri Secure / XIP Bootloader**.
+3. Read flag:
+   - **1** → `qspi_new_app_load()` (does not return).
+   - **0** → LCD **App load: OFF / Jump to app** → mmap + validate @ `0x90000000` → jump if valid, else bootloader poll (planned; LCD + poll done today).
+   - Invalid → LCD warning, `app_load_disable()`.
+4. **`while(1)`:** heartbeat on **PE3**; UART idle receive — if string is **`SP`**, `app_load_enable()` then `qspi_new_app_load()`; if flag **1**, call `qspi_new_app_load()`.
+
+### `qspi_new_app_load()` (stub)
+
+Today (`Features/qspi_app_load`):
+
+1. LCD: **At app load (Stub)** for 5 s.
+2. `app_load_disable()` → flag **0**.
+3. `NVIC_SystemReset()`.
+
+**Planned:** disable mmap → erase/write `app.bin` @ offset 0 → clear flag → mmap on → soft reset.
+
+### Jump path when flag is 0 (planned in firmware)
+
+1. LCD **App load: OFF / Jump to app** (done).
+2. `QSPI_Flash_EnableMemoryMappedMode` → `qspi_app_is_valid(0x90000000)`.
+3. **Valid** → `qspi_app_jump_to_application()` → application running.
+4. **Invalid** → stay in bootloader: PE3 heartbeat, poll flag for load request.
+
+---
+
+## Host flash tool — `saptashri_flash.py`
+
+UART programming for **W25Q64** at flash offset **`0x00000000`**.  
+Bootloader enables **memory-mapped mode** and runs the app at **`0x90000000`** after reset.
+
+**Hardware:** USART1 **PA9/PA10** (WeAct USB‑VCP), **115200 8N1**.
+
+### Install
+
+```bash
+pip install -r tools/requirements.txt
+```
+
+### Protocol
+
+| Step | Host | Bootloader |
+|------|------|------------|
+| 1 | `SP` + 4-byte LE **size** | Idle: `app_load_enable()`, `qspi_new_app_load()` |
+| 2 | Wait | QSPI init, mmap off, sector erase |
+| 3 | Wait | **ACK** `0x79` — ready for data |
+| 4 | ≤256 B chunk | Write @ 0x0, **ACK** per chunk |
+| 5 | — | mmap on, flag 0, **reset** |
+
+No ST-LINK required for application updates.
+
+**Today:** idle loop recognizes **`SP`** on UART (`Peripherals/UART1`, `strcmp` in `main.c`). Full **size + ACK + chunk program** path in `qspi_new_app_load()` is still planned.
+
+### Usage
+
+```bash
+python tools/saptashri_flash.py
+python tools/saptashri_flash.py -p COM5 app.bin
+python tools/saptashri_flash.py -p COM5 --info app.hex
+```
+
+`.hex` linked at **`0x90000000`** is converted to offset **0** automatically.
+
+### Firmware (UART / QSPI load)
+
+| Module | Role |
+|--------|------|
+| `Peripherals/UART1/` | `uart_mcal` — send/recv on USART1 |
+| `Core/Src/main.c` | Idle poll: `uart_recv_string` + **`SP`** → load |
+| `Features/qspi_app_load/` | Erase, UART RX, `QSPI_Flash_Write` (stub / planned) |
+
+Internal bootloader @ `0x08000000`: flash once via CubeIDE / ST-LINK.
+
+---
+
+## Build (STM32CubeIDE)
+
+- Target: **STM32H750VBTx**, project **STM32H7xx_QSPI**.
+- Add include paths if a new `Features/*/inc` folder is added:
+  - `../Features/app_shared_ram/inc`
+  - `../Features/qspi_app_load/inc`
+  - `../Features/qspi_app_jump/inc`
+  - `../Peripherals/UART1/Inc`
+- After **Generate Code**, verify `Debug/**/subdir.mk` still lists those `-I` paths (Cube sometimes regenerates makefiles without them).
+
+---
+
+## Hardware
+
+| Item | Detail |
 |------|--------|
-| **MCU** | STM32H750VBTx |
-| **Peripheral** | QUADSPI (BK1, single flash) |
-| **Flash IC** | **Winbond W25Q64** (8 MByte external NOR) |
+| MCU | STM32H750VBTx (MiniSTM32H750 / WeAct) |
+| External flash | W25Q64 on QUADSPI BK1 (`PB2`, `PB6`, `PD11`–`PD13`, `PE2`) |
+| LCD | ST7735 on SPI4, backlight TIM1_CH2N **PE10** |
+| Heartbeat LED | **PE3** |
 
-| QSPI signal | MCU pin | CubeMX User Label | Alternate function | GPIO max speed |
-|-------------|---------|-------------------|--------------------|----------------|
-| `QUADSPI_CLK` | **PB2** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
-| `QUADSPI_BK1_NCS` | **PB6** | _(none, locked)_ | `GPIO_AF10_QUADSPI` | `VERY_HIGH` |
-| `QUADSPI_BK1_IO0` | **PD11** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
-| `QUADSPI_BK1_IO1` | **PD12** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
-| `QUADSPI_BK1_IO2` | **PE2** | _(none)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
-| `QUADSPI_BK1_IO3` | **PD13** | _(none, locked)_ | `GPIO_AF9_QUADSPI` | `VERY_HIGH` |
+See `Peripherals/QSPI_Flash` and `Peripherals/SPI4_LCD` sources and CubeMX `.ioc` for pin details.
 
-### TFT LCD — ST7735 (SPI4)
+---
 
-| Item | Value |
+## Status summary
+
+| Item | Status |
 |------|--------|
-| **Panel / controller** | **ST7735** family (SPI RGB TFT) |
-| **MCU data bus** | **SPI4** (8-bit, software NSS; CS/DC on GPIO) |
-| **Backlight** | **TIM1** channel 2 complementary output (**TIM1_CH2N** on **PE10**) |
-
-| LCD / bus signal | MCU pin | CubeMX User Label | Mode / alternate function | GPIO max speed |
-|------------------|---------|-------------------|---------------------------|----------------|
-| `SPI4_MISO` | **PE5** | _(none)_ | `GPIO_AF5_SPI4` | `VERY_HIGH` |
-| `SPI4_SCK` | **PE12** | _(none)_ | `GPIO_AF5_SPI4` | `VERY_HIGH` |
-| `SPI4_MOSI` | **PE14** | _(none)_ | `GPIO_AF5_SPI4` | `VERY_HIGH` |
-| LCD chip select (CS) | **PE11** | **`LCD_CS`** | `GPIO_Output` | `LOW` |
-| Data / command (DC, RS) | **PE13** | **`LCD_WR_RS`** | `GPIO_Output` | `LOW` |
-| Backlight PWM | **PE10** | _(none, locked)_ | `GPIO_AF1_TIM1` (TIM1_CH2N) | `LOW` |
-
----
-
-## 1) Pin map (must match CubeMX `.ioc`)
-
-The W25Q64 QSPI pinout is summarized in **Hardware summary → QSPI — Winbond W25Q64** above. Board-specific notes:
-
-> **Why PB6 uses AF10 while every other pin uses AF9:**
-> On STM32H750, `QUADSPI_BK1_NCS` is exposed on AF9 for `PB10` and on **AF10 for `PB6`**.
-> CubeMX picks the correct AF automatically. Do not change it manually.
-
-> Pins for `PB6` and `PD13` are kept *Locked* in the `.ioc` so a careless re-pinout cannot
-> drift them back to the CubeMX defaults (`PB10` / `PA1`) which do not match this board.
-
-### Pin pitfalls (and why we hit them)
-CubeMX's *default* pinmux for QSPI BK1 selects `PB10` for `NCS` and `PA1` for `IO3`, which
-**do not match** the MiniSTM32H750 board wiring. Symptom: ReadID returns `0x00 0x00 0x00`
-because CS never asserts on the chip. The fix is to manually pick `PB6` and `PD13` in the
-*Pinout & Configuration* view.
-
----
-
-## 2) QSPI peripheral configuration
-
-| `hqspi.Init.*`            | Value                                | Meaning                              |
-|---------------------------|--------------------------------------|--------------------------------------|
-| `ClockPrescaler`          | `2 - 1`                              | QSPI bus = kernel / (Prescaler+1)    |
-| `FifoThreshold`           | `32`                                 | FIFO threshold in bytes              |
-| `SampleShifting`          | `QSPI_SAMPLE_SHIFTING_HALFCYCLE`     | Sample on opposite edge for margin   |
-| `FlashSize`               | `23 - 1`                             | log2(8 MB) − 1 → 22 → 8 MB           |
-| `ChipSelectHighTime`      | `QSPI_CS_HIGH_TIME_8_CYCLE`          | CS high min between commands         |
-| `ClockMode`               | `QSPI_CLOCK_MODE_3`                  | CPOL=1, CPHA=1 (W25Q standard)       |
-| `FlashID`                 | `QSPI_FLASH_ID_1`                    | Use BK1                              |
-| `DualFlash`               | `QSPI_DUALFLASH_DISABLE`             | Single chip                          |
-
-### CubeMX defaults vs what we changed
-
-| Field                         | CubeMX default              | Required value              | Changed? |
-|-------------------------------|-----------------------------|-----------------------------|----------|
-| QSPI peripheral parameters    | (default OK)                | (default OK)                | No       |
-| GPIO `Maximum Output Speed`   | `LOW`                       | `VERY_HIGH`                 | **Yes**  |
-| Pin: `QUADSPI_BK1_NCS`        | `PB10`                      | `PB6`                       | **Yes**  |
-| Pin: `QUADSPI_BK1_IO3`        | `PA1`                       | `PD13`                      | **Yes**  |
-| GPIO `Fast Mode` on `PB6`     | `Disable` (not used at this freq) | leave `Disable`       | No       |
-
----
-
-## 3) Clock chain & safe QSPI speeds
-
-### W25Q64 datasheet clock limits
-
-| Operation                                | Max SCK frequency |
-|------------------------------------------|-------------------|
-| Standard SPI Read `0x03`                 | 50 MHz            |
-| Fast Read `0x0B` / `0x6B` / `0xEB`       | **104 MHz**       |
-| Page Program / Sector Erase / WriteSR    | 104 MHz           |
-
-So any QSPI bus frequency from a few MHz up to **~104 MHz** is electrically safe for the
-W25Q64. PCB trace quality, sample-shifting, and dummy-cycles set the *practical* upper
-bound, which on this hand-soldered board is comfortable up to **~50–60 MHz**.
-
-### STM32H750 clock chain that feeds QSPI
-
-```
-  HSE 25 MHz / HSI 64 MHz
-            │
-            ▼
-        PLL1 (optional)
-            │
-            ▼
-   SYSCLK ──HPRE──► HCLK / D1HCLK ──┐
-                                    └──► QSPI kernel clock (D1HCLK)
-                                                 │
-                                          ÷ (Prescaler + 1)
-                                                 ▼
-                                            QSPI bus (SCK)
-```
-
-`Init.ClockPrescaler` is the value written to the prescaler field; the actual divider is
-`Prescaler + 1`. So `Init.ClockPrescaler = 2 - 1 = 1` means **divide by 2**.
-
-### Two clock scenarios you may encounter
-
-| Scenario                              | SYSCLK | HCLK / kernel | Bus @ Prescaler 2-1 | Use this when…                       |
-|---------------------------------------|--------|----------------|---------------------|--------------------------------------|
-| **Bring-up (current, HSI no-PLL)**    | 64 MHz | 64 MHz         | **32 MHz**          | Verifying basic ID read / driver     |
-| **Production (HSE + PLL)**            | 480 MHz| 240 MHz        | **120 MHz** ⚠ over-spec | Increase `Prescaler` to `3-1` or `4-1` to land at 60–80 MHz |
-
-> ⚠ At a 240 MHz QSPI kernel, `Prescaler = 2 - 1` produces a 120 MHz bus — **above** the
-> 104 MHz W25Q64 limit. When you switch to PLL, also bump the prescaler to keep the bus
-> ≤ ~80 MHz with healthy margin.
-
-### Recommended prescaler choices
-
-| QSPI kernel clock (D1HCLK) | Use `Init.ClockPrescaler` | Resulting bus       |
-|----------------------------|---------------------------|---------------------|
-| 64 MHz (HSI, no PLL)       | `2 - 1`                   | 32 MHz (safe)       |
-| 120 MHz                    | `2 - 1`                   | 60 MHz (safe)       |
-| 240 MHz (PLL, full speed)  | `4 - 1` (recommended)     | 60 MHz (safe)       |
-| 240 MHz                    | `3 - 1`                   | 80 MHz (still safe) |
-| 240 MHz                    | `2 - 1`                   | **120 MHz (over)**  |
-
----
-
-## 4) Improvements over stock CubeMX defaults
-
-Each item below is documented with an inline comment in the driver source.
-
-| Area                  | Stock CubeMX behaviour                  | This driver does                                                                 |
-|-----------------------|------------------------------------------|----------------------------------------------------------------------------------|
-| ID command            | `0x9F` JEDEC, no address phase, 3 bytes  | `0x90` Manufacturer/Device ID, 1-line 24-bit address `0x000000`, 2 bytes         |
-| Reset sequence        | Single 1-line `0x66` + `0x99`            | Blind 4-line `0x66`+`0x99` first (recovers from QPI), then 1-line `0x66`+`0x99`  |
-| Init validation       | Strict 3-byte JEDEC compare              | Validate manufacturer byte (`0xEF` Winbond) only; device byte informational      |
-| Quad-Enable bit write | Combined SR1+SR2 via `0x01`              | (Helper provided as `W25Q64_CMD_WRITE_STATUS_REG2 = 0x31` for SR2-only writes)   |
-| Speed switching at init | n/a                                    | Removed — rely on CubeMX prescaler instead                                       |
-
----
-
-## 5) Public API
-
-```c
-QSPI_Flash_StatusTypeDef QSPI_Flash_Init(QSPI_HandleTypeDef *hqspi);
-QSPI_Flash_StatusTypeDef QSPI_Flash_Reset(QSPI_HandleTypeDef *hqspi);
-QSPI_Flash_StatusTypeDef QSPI_Flash_ReadID(QSPI_HandleTypeDef *hqspi, uint8_t *pID);
-
-QSPI_Flash_StatusTypeDef QSPI_Flash_EraseSector  (QSPI_HandleTypeDef *hqspi, uint32_t SectorAddress);
-QSPI_Flash_StatusTypeDef QSPI_Flash_EraseBlock32K(QSPI_HandleTypeDef *hqspi, uint32_t BlockAddress);
-QSPI_Flash_StatusTypeDef QSPI_Flash_EraseBlock64K(QSPI_HandleTypeDef *hqspi, uint32_t BlockAddress);
-QSPI_Flash_StatusTypeDef QSPI_Flash_EraseChip    (QSPI_HandleTypeDef *hqspi);
-
-QSPI_Flash_StatusTypeDef QSPI_Flash_WritePage(QSPI_HandleTypeDef *hqspi, uint32_t Address, const uint8_t *pData, uint32_t Size);
-QSPI_Flash_StatusTypeDef QSPI_Flash_Write    (QSPI_HandleTypeDef *hqspi, uint32_t Address, const uint8_t *pData, uint32_t Size);
-QSPI_Flash_StatusTypeDef QSPI_Flash_Read     (QSPI_HandleTypeDef *hqspi, uint32_t Address,       uint8_t *pData, uint32_t Size);
-
-QSPI_Flash_StatusTypeDef QSPI_Flash_EnableMemoryMappedMode(QSPI_HandleTypeDef *hqspi);
-```
-
-### Typical bring-up sequence
-
-```c
-#include "qspi_flash.h"
-
-extern QSPI_HandleTypeDef hqspi;
-static uint8_t  jedecId[3];
-
-if (QSPI_Flash_Init(&hqspi) != QSPI_FLASH_OK)        Error_Handler();
-if (QSPI_Flash_ReadID(&hqspi, jedecId) != QSPI_FLASH_OK) Error_Handler();
-
-/* Expected: jedecId[0] = 0xEF, jedecId[1] = 0x16, jedecId[2] = 0x00 (untouched). */
-```
-
----
-
-## 6) Memory map cheat-sheet
-
-| View                       | Address range              | Notes                                  |
-|----------------------------|----------------------------|----------------------------------------|
-| W25Q64 internal address    | `0x00_0000` … `0x7F_FFFF`  | 8 MB linear flash address space        |
-| STM32 memory-mapped (XIP)  | `0x9000_0000` … `0x907F_FFFF` | Visible only after `EnableMemoryMappedMode` |
-
----
-
-## 7) SPI4 + TIM1 for the on-board TFT LCD
-
-The MiniSTM32H750 carries an SPI TFT (ST7735 family) driven from **SPI4** for the data
-bus and **TIM1_CH2N** for the backlight PWM. The driver under
-`Peripherals/SPI4_LCD/` accesses these through the CubeMX-generated handles
-`hspi4` and `htim1`, plus two GPIO outputs for `CS` and `DC/RS`.
-
-### 7.1) LCD pin map (must match CubeMX `.ioc`)
-
-SPI / backlight GPIO lines are listed in **Hardware summary → TFT LCD — ST7735 (SPI4)** above. Extra nets used by the app:
-
-| Signal            | MCU pin | CubeMX User Label | Notes |
-|-------------------|---------|-------------------|--------|
-| LCD `RESET`       | n/a     | n/a               | Not driven by MCU; `LCD_RST_SET` / `LCD_RST_RESET` in `lcd_app.c` are intentionally empty |
-| Heartbeat LED     | **PE3** | _(none)_          | `GPIO_Output`, `LOW` speed; toggled in `main.c` `while(1)` |
-
-> **The User Label matters.** CubeMX auto-generates macros from the User Label, so
-> `LCD_CS` → `LCD_CS_Pin` / `LCD_CS_GPIO_Port` and `LCD_WR_RS` → `LCD_WR_RS_Pin` /
-> `LCD_WR_RS_GPIO_Port`. The LCD driver in `Peripherals/SPI4_LCD/Src/lcd_app.c` references
-> exactly those names; renaming the label breaks the build.
-
-### 7.2) SPI4 / TIM1 peripheral configuration
-
-| Peripheral | Field                       | Value                          | Notes                                   |
-|------------|-----------------------------|--------------------------------|-----------------------------------------|
-| SPI4       | `Mode`                      | `SPI_MODE_MASTER`              | MCU is master                           |
-| SPI4       | `Direction`                 | `SPI_DIRECTION_2LINES`         | Full-duplex (MISO unused but routed)    |
-| SPI4       | `DataSize`                  | `SPI_DATASIZE_8BIT`            | Standard ST7735 framing                 |
-| SPI4       | `NSS`                       | `SPI_NSS_SOFT`                 | CS handled by `LCD_CS` GPIO, not SPI HW |
-| SPI4       | `BaudRatePrescaler`         | `÷16` (CubeMX default)         | ≈ 60 Mbit/s @ 240 MHz HCLK; lower if you see corruption |
-| SPI4       | `CLKPolarity` / `CLKPhase`  | `LOW` / `1EDGE`                | ST7735 mode 0                           |
-| SPI4 clock | `Spi45ClockSelection`       | `RCC_SPI45CLKSOURCE_D2PCLK1`   | Driven by APB1 (D2) per `.ioc` defaults |
-| TIM1       | `Channel-PWM Generation2`   | `TIM_CHANNEL_2` CH2N           | Drives backlight via complementary out  |
-| TIM1       | `ARR` (period)              | `65535` (full 16-bit)          | `LCD_SetBrightness` writes raw compare  |
-| TIM1       | Start API                   | `HAL_TIMEx_PWMN_Start(...)`    | **Note `PWMN`, not `PWM`** for CH2N     |
-
-### 7.3) Quick LCD bring-up (already wired into `main.c`)
-
-```c
-#include "lcd_mcal.h"
-
-lcd_stm32h7_init();           /* SPI4 + TIM1 PWM + ST7735 init    */
-lcd_stm32h7_backlight(100);   /* 0..100%, mapped to TIM1 compare  */
-lcd_stm32h7_clear();
-lcd_stm32h7_message("Hello World");
-```
-
----
-
-## 8) Troubleshooting matrix
-
-| Symptom on `id[0..2]`  | Most likely cause                                    | Fix                                        |
-|------------------------|------------------------------------------------------|--------------------------------------------|
-| `FF FF FF`             | Bus floating (CS not asserted, wrong pin / unpowered)| Check pinmap, board power                  |
-| `00 00 00`             | Bus driven low / mis-timed sample / wrong pinmap     | Check GPIO speed = `VERY_HIGH`, lower QSPI clock, verify `PB6/PD13` |
-| `EF FF` / partial      | Marginal timing                                      | Lower prescaler, check `SampleShifting`    |
-| `EF 16`                | Working                                              | Driver and hardware both healthy            |
-
----
-
-## 9) Change log
-
-| Date         | Change                                                                   |
-|--------------|--------------------------------------------------------------------------|
-| Initial      | Driver created from CubeMX HAL QSPI examples for W25Q64                  |
-| Hardening pass 1 | `0x90` ReadID, dual reset path (4-line + 1-line), relaxed `0xEF` check |
-| Pinmap fix   | `NCS` moved `PB10` → `PB6`; `IO3` moved `PA1` → `PD13`; all GPIO `VERY_HIGH` |
-| Clean-up     | Removed `SetLowSpeed`/`SetHighSpeed`; rely on CubeMX prescaler            |
-| LCD pinmap   | `SPI4_MOSI` `PE6` → `PE14`; `TIM1_CH2N` `PB0` → `PE10`; added `LCD_CS=PE11`, `LCD_WR_RS=PE13` (User Labels in CubeMX) |
-| Doc refresh  | Added User Label / AF / Speed columns for QSPI and LCD pin maps          |
-| Doc refresh  | Top **Hardware summary** tables: QSPI + W25Q64 header/pins, then ST7735 / SPI4 + pins |
-| Doc refresh  | Added Sibun copyright notice to this README (at end of document) |
-
----
-
-## 10) WeAct Board Reference
-
-| Area | WeAct board setting | Project setting | Status |
-|------|---------------------|-----------------|--------|
-| QSPI flash IC | Winbond W25Q64, 64 Mbit / 8 MB | `qspi_flash` driver targets W25Q64 | Matches |
-| QSPI CLK | `PB2` | `QUADSPI_CLK` on `PB2`, `GPIO_AF9_QUADSPI`, `VERY_HIGH` | Matches |
-| QSPI NCS | `PB6` | `QUADSPI_BK1_NCS` on `PB6`, `GPIO_AF10_QUADSPI`, `VERY_HIGH` | Matches |
-| QSPI IO0 | `PD11` | `QUADSPI_BK1_IO0` on `PD11`, `GPIO_AF9_QUADSPI`, `VERY_HIGH` | Matches |
-| QSPI IO1 | `PD12` | `QUADSPI_BK1_IO1` on `PD12`, `GPIO_AF9_QUADSPI`, `VERY_HIGH` | Matches |
-| QSPI IO2 | `PE2` | `QUADSPI_BK1_IO2` on `PE2`, `GPIO_AF9_QUADSPI`, `VERY_HIGH` | Matches |
-| QSPI IO3 | `PD13` | `QUADSPI_BK1_IO3` on `PD13`, `GPIO_AF9_QUADSPI`, `VERY_HIGH` | Matches |
-| LCD SPI | SPI4 | `hspi4` used by `Peripherals/SPI4_LCD` | Matches |
-| LCD SPI MISO | `PE5` | `SPI4_MISO` on `PE5`, `GPIO_AF5_SPI4`, `VERY_HIGH` | Matches |
-| LCD SPI SCK | `PE12` | `SPI4_SCK` on `PE12`, `GPIO_AF5_SPI4`, `VERY_HIGH` | Matches |
-| LCD SPI MOSI | `PE14` | `SPI4_MOSI` on `PE14`, `GPIO_AF5_SPI4`, `VERY_HIGH` | Matches |
-| LCD backlight PWM | `PE10` / `TIM1_CH2N` | `htim1`, `TIM_CHANNEL_2`, `HAL_TIMEx_PWMN_Start()` | Matches |
-| LCD chip select | `PE11` | CubeMX User Label `LCD_CS` | Matches |
-| LCD data/command | `PE13` | CubeMX User Label `LCD_WR_RS` | Matches |
+| Bootloader @ `0x08000000` | Done |
+| QSPI W25Q64 driver | Done |
+| `app_shared_ram` flag API | Done |
+| LCD welcome + flag display | Done |
+| `qspi_new_app_load()` stub | Done |
+| While-loop flag poll + reset | Done |
+| Real QSPI program in `qspi_new_app_load` | Planned |
+| Jump to app when flag 0 | Planned |
+| Host UART `SP` trigger in idle loop | Done (stub load path) |
+| Host UART size + ACK + chunk program | Planned |
 
 ---
 
 ## Copyright
 
-**Copyright © 2026 Sibun.** All rights reserved.
-
-This README documents the QSPI flash driver, peripheral integration, and board reference material in this repository unless otherwise noted.
-
----
+Copyright © 2026 Sibun. All rights reserved.
