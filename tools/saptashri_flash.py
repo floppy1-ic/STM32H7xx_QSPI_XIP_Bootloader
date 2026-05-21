@@ -2,11 +2,13 @@
 """
 Saptashri Secure XIP Bootloader — UART host flash tool.
 
-Protocol:
-  1. Host sends SP every 50 ms for up to 5 s until bootloader replies true or false
-  2. true = mmap disabled OK (MCU resets); false = mmap disable failed
-  3. Host sends firmware in 256-byte chunks; per-chunk ACK (firmware TBD)
-  4. Bootloader programs @ 0x00000000, then mmap + reset (firmware TBD)
+Protocol (must match qspi_app_load.c):
+  1. Host: SP (repeat)           MCU: true\\r\\n or false\\r\\n
+  2. MCU: erase 100 KB @ 0x0     Host: wait EC\\r\\n
+  3. MCU: WE\\r\\n                Host: wait WE
+  4. Host: S + 4-byte LE size    MCU: K (ok) or N
+  5. Host: chunks (<=256 B)      MCU: Y or N per chunk
+  6. MCU: mmap on + reset
 
 Examples:
   python tools/saptashri_flash.py
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import struct
 import sys
 import time
 from pathlib import Path
@@ -36,18 +39,29 @@ QSPI_XIP_BASE = 0x9000_0000
 LOAD_TRIGGER = b"SP"
 RESP_TRUE = b"true"
 RESP_FALSE = b"false"
+RESP_ERASE_COMPLETE = b"EC"
+RESP_WRITE_ENABLE = b"WE"
 ACK = ord("Y")
 NACK = ord("N")
 CHUNK_SIZE = 256
+FLASH_CLEAN_SIZE_BYTES = 100 * 1024
 
 DEFAULT_BAUD = 115200
 DEFAULT_TIMEOUT = 5.0
 ACK_TIMEOUT = 120.0
+ERASE_COMPLETE_TIMEOUT_S = 120.0
+WRITE_ENABLE_TIMEOUT_S = 30.0
+SIZE_ACK_TIMEOUT_S = 30.0
+POST_WE_DELAY_S = 0.08
+POST_SIZE_DELAY_S = 0.05
+SYNC_SIZE = b"S"
+ACK_SIZE_OK = ord("K")
 
 SP_TRIGGER_INTERVAL_S = 0.05
 SP_TRIGGER_DURATION_S = 8.0
 SP_RESPONSE_POLL_S = 0.1
 POST_READY_DELAY_S = 0.5
+TOKEN_POLL_S = 0.1
 
 PROGRESS_BAR_WIDTH = 50
 
@@ -309,27 +323,45 @@ class SaptashriUartFlasher:
             stopbits=serial.STOPBITS_ONE,
             timeout=timeout,
         )
+        self._rx_pending = bytearray()
         self.ser.reset_input_buffer()
 
     def close(self) -> None:
         if self.ser.is_open:
             self.ser.close()
 
+    def _wait_for_byte_ack(
+        self, expected: int, context: str, timeout: float = ACK_TIMEOUT
+    ) -> None:
+        """Poll until expected ACK byte (skip \\r\\n; drain stray ASCII)."""
+        deadline = time.monotonic() + timeout
+
+        while time.monotonic() < deadline:
+            self._poll_serial_into_pending()
+
+            while self._rx_pending and self._rx_pending[0] in (0x0D, 0x0A):
+                del self._rx_pending[0]
+
+            if self._rx_pending:
+                value = self._rx_pending.pop(0)
+            else:
+                time.sleep(TOKEN_POLL_S)
+                continue
+
+            if value == expected:
+                return
+            if value == NACK:
+                raise FlashToolError(f"Bootloader NACK ({context})")
+
+        tail = self._rx_pending.decode("utf-8", errors="replace").strip()
+        hint = f" Last RX: {tail!r}" if tail else ""
+        raise FlashToolError(
+            f"Timeout waiting for {chr(expected)!r} ({context}){hint}. "
+            "Rebuild & flash bootloader (ST-Link), then retry."
+        )
+
     def _read_ack(self, context: str, timeout: float = ACK_TIMEOUT) -> None:
-        old = self.ser.timeout
-        self.ser.timeout = timeout
-        try:
-            b = self.ser.read(1)
-        finally:
-            self.ser.timeout = old
-        if not b:
-            raise FlashToolError(f"Timeout waiting for ACK ({context})")
-        if b[0] == ACK:
-            return
-        if b[0] == NACK:
-            raise FlashToolError(f"Bootloader NACK ({context})")
-        ch = chr(b[0]) if 32 <= b[0] < 127 else "?"
-        raise FlashToolError(f"Expected Y, got 0x{b[0]:02X} ({ch!r}) ({context})")
+        self._wait_for_byte_ack(ACK, context, timeout)
 
     def _send_sp_until_ready(self, *, progress: bool = True) -> None:
         """Send SP until RX contains 'true' (ready) or 'false' (mmap disable failed)."""
@@ -369,6 +401,7 @@ class SaptashriUartFlasher:
                             f"{_paint('(true)', _Ansi.GREEN)} after {attempt} SP(s)."
                         )
                     time.sleep(POST_READY_DELAY_S)
+                    self._rx_pending.clear()
                     self.ser.reset_input_buffer()
                     return
 
@@ -381,10 +414,59 @@ class SaptashriUartFlasher:
             f"({attempt} SP sends). Is the bootloader idle on UART?{hint}"
         )
 
+    def _poll_serial_into_pending(self) -> None:
+        old = self.ser.timeout
+        self.ser.timeout = TOKEN_POLL_S
+        try:
+            chunk = self.ser.read(512)
+        finally:
+            self.ser.timeout = old
+        if chunk:
+            self._rx_pending.extend(chunk)
+
+    def _wait_for_token(
+        self,
+        token: bytes,
+        deadline_s: float,
+        *,
+        progress: bool,
+        label: str,
+    ) -> None:
+        """Accumulate RX until token appears; keep bytes after token for the next wait."""
+        deadline = time.monotonic() + deadline_s
+
+        if progress:
+            _print_info(f"Waiting for {label}...")
+
+        while time.monotonic() < deadline:
+            self._poll_serial_into_pending()
+
+            if RESP_FALSE in self._rx_pending:
+                raise FlashToolError(f"Bootloader false while waiting for {label}")
+            if bytes([NACK]) in self._rx_pending:
+                raise FlashToolError(f"Bootloader NACK while waiting for {label}")
+
+            idx = self._rx_pending.find(token)
+            if idx >= 0:
+                del self._rx_pending[: idx + len(token)]
+                if progress:
+                    _print_done(f"{label} received")
+                return
+
+            time.sleep(TOKEN_POLL_S)
+
+        tail = self._rx_pending.decode("utf-8", errors="replace").strip()
+        hint = f" Last RX: {tail!r}" if tail else ""
+        raise FlashToolError(f"Timeout waiting for {label}{hint}")
+
     def program(self, image: bytes, *, progress: bool = True) -> None:
         if len(image) > QSPI_FLASH_SIZE:
             raise FlashToolError(f"Image {len(image)} B > W25Q64 size")
-
+        if len(image) > FLASH_CLEAN_SIZE_BYTES:
+            raise FlashToolError(
+                f"Image {len(image)} B > {FLASH_CLEAN_SIZE_BYTES} B erase window "
+                "(increase FLASH_CLEAN_SIZE_BYTES in firmware and tool)"
+            )
         if progress:
             _print_info(
                 f"Image: {len(image)} bytes @ QSPI {_addr(QSPI_FLASH_BASE)}"
@@ -392,8 +474,39 @@ class SaptashriUartFlasher:
 
         self._send_sp_until_ready(progress=progress)
 
+        self._wait_for_token(
+            RESP_ERASE_COMPLETE,
+            ERASE_COMPLETE_TIMEOUT_S,
+            progress=progress,
+            label="EC (erase complete)",
+        )
+        self._wait_for_token(
+            RESP_WRITE_ENABLE,
+            WRITE_ENABLE_TIMEOUT_S,
+            progress=progress,
+            label="WE (write enable)",
+        )
+
+        self._rx_pending.clear()
+        time.sleep(POST_WE_DELAY_S)
+
+        size_payload = SYNC_SIZE + struct.pack("<I", len(image))
+        self.ser.write(size_payload)
+        self.ser.flush()
         if progress:
-            _print_info(f"Flashing in {CHUNK_SIZE}-byte chunks...")
+            _print_info(
+                f"Sent size sync + {len(image)} bytes "
+                f"({_paint(size_payload.hex(), _Ansi.DIM)})"
+            )
+
+        self._wait_for_byte_ack(ACK_SIZE_OK, "size", timeout=SIZE_ACK_TIMEOUT_S)
+        if progress:
+            _print_done("Size accepted (K)")
+
+        time.sleep(POST_SIZE_DELAY_S)
+
+        if progress:
+            _print_info(f"Flashing in up to {CHUNK_SIZE}-byte chunks...")
 
         sent = 0
         t0 = time.monotonic()

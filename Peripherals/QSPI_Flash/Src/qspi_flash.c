@@ -19,6 +19,9 @@
 
 /* Static helpers ----------------------------------------------------------- */
 static QSPI_Flash_StatusTypeDef QSPI_Flash_WriteEnable(QSPI_HandleTypeDef *hqspi);
+static QSPI_Flash_StatusTypeDef QSPI_Flash_ReadStatusReg2(QSPI_HandleTypeDef *hqspi, uint8_t *pSr2);
+static QSPI_Flash_StatusTypeDef QSPI_Flash_WriteStatusReg2(QSPI_HandleTypeDef *hqspi, uint8_t sr2);
+static QSPI_Flash_StatusTypeDef QSPI_Flash_EnsureQuadEnable(QSPI_HandleTypeDef *hqspi);
 static QSPI_Flash_StatusTypeDef QSPI_Flash_AutoPollingMemReady(QSPI_HandleTypeDef *hqspi, uint32_t Timeout);
 static QSPI_Flash_StatusTypeDef QSPI_Flash_HALToStatus(HAL_StatusTypeDef halStatus);
 static QSPI_Flash_StatusTypeDef QSPI_Flash_BytesFromJedecDensity(uint8_t density, uint32_t *pSizeBytes);
@@ -50,6 +53,12 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_Init(QSPI_HandleTypeDef *hqspi)
   }
 
   if (id[0] != W25Q64_MANUFACTURER_ID)
+  {
+    return QSPI_FLASH_ERROR;
+  }
+
+  /* P0-2: Quad Enable (SR2.QE) required for 0xEB memory-mapped / quad I/O. */
+  if (QSPI_Flash_EnsureQuadEnable(hqspi) != QSPI_FLASH_OK)
   {
     return QSPI_FLASH_ERROR;
   }
@@ -541,6 +550,101 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_DisableMemoryMappedMode(QSPI_HandleTypeDef *
 /* ========================================================================== */
 /* Static helpers                                                              */
 /* ========================================================================== */
+
+/* Function start: QSPI_Flash_ReadStatusReg2 ------------------------------- */
+static QSPI_Flash_StatusTypeDef QSPI_Flash_ReadStatusReg2(QSPI_HandleTypeDef *hqspi, uint8_t *pSr2)
+{
+  QSPI_CommandTypeDef cmd = {0};
+  HAL_StatusTypeDef status;
+
+  if ((hqspi == NULL) || (pSr2 == NULL))
+  {
+    return QSPI_FLASH_ERROR;
+  }
+
+  cmd.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
+  cmd.Instruction       = W25Q64_CMD_READ_STATUS_REG2;
+  cmd.AddressMode       = QSPI_ADDRESS_NONE;
+  cmd.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
+  cmd.DataMode          = QSPI_DATA_1_LINE;
+  cmd.NbData            = 1U;
+  cmd.DummyCycles       = 0U;
+  cmd.DdrMode           = QSPI_DDR_MODE_DISABLE;
+  cmd.DdrHoldHalfCycle  = QSPI_DDR_HHC_ANALOG_DELAY;
+  cmd.SIOOMode          = QSPI_SIOO_INST_EVERY_CMD;
+
+  status = HAL_QSPI_Command(hqspi, &cmd, QSPI_FLASH_DEFAULT_TIMEOUT);
+  if (status != HAL_OK)
+  {
+    return QSPI_Flash_HALToStatus(status);
+  }
+
+  return QSPI_Flash_HALToStatus(HAL_QSPI_Receive(hqspi, pSr2, QSPI_FLASH_DEFAULT_TIMEOUT));
+}
+/* Function end: QSPI_Flash_ReadStatusReg2 --------------------------------- */
+
+/* Function start: QSPI_Flash_WriteStatusReg2 ------------------------------ */
+static QSPI_Flash_StatusTypeDef QSPI_Flash_WriteStatusReg2(QSPI_HandleTypeDef *hqspi, uint8_t sr2)
+{
+  QSPI_CommandTypeDef cmd = {0};
+  HAL_StatusTypeDef status;
+
+  if (hqspi == NULL)
+  {
+    return QSPI_FLASH_ERROR;
+  }
+
+  if (QSPI_Flash_WriteEnable(hqspi) != QSPI_FLASH_OK)
+  {
+    return QSPI_FLASH_ERROR;
+  }
+
+  cmd.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
+  cmd.Instruction       = W25Q64_CMD_WRITE_STATUS_REG2;
+  cmd.AddressMode       = QSPI_ADDRESS_NONE;
+  cmd.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
+  cmd.DataMode          = QSPI_DATA_1_LINE;
+  cmd.NbData            = 1U;
+  cmd.DummyCycles       = 0U;
+  cmd.DdrMode           = QSPI_DDR_MODE_DISABLE;
+  cmd.DdrHoldHalfCycle  = QSPI_DDR_HHC_ANALOG_DELAY;
+  cmd.SIOOMode          = QSPI_SIOO_INST_EVERY_CMD;
+
+  status = HAL_QSPI_Command(hqspi, &cmd, QSPI_FLASH_DEFAULT_TIMEOUT);
+  if (status != HAL_OK)
+  {
+    return QSPI_Flash_HALToStatus(status);
+  }
+
+  status = HAL_QSPI_Transmit(hqspi, &sr2, QSPI_FLASH_DEFAULT_TIMEOUT);
+  if (status != HAL_OK)
+  {
+    return QSPI_Flash_HALToStatus(status);
+  }
+
+  return QSPI_Flash_AutoPollingMemReady(hqspi, QSPI_FLASH_PROGRAM_TIMEOUT);
+}
+/* Function end: QSPI_Flash_WriteStatusReg2 -------------------------------- */
+
+/* Function start: QSPI_Flash_EnsureQuadEnable ------------------------------- */
+static QSPI_Flash_StatusTypeDef QSPI_Flash_EnsureQuadEnable(QSPI_HandleTypeDef *hqspi)
+{
+  uint8_t sr2 = 0U;
+
+  if (QSPI_Flash_ReadStatusReg2(hqspi, &sr2) != QSPI_FLASH_OK)
+  {
+    return QSPI_FLASH_ERROR;
+  }
+
+  if ((sr2 & W25Q64_SR2_QE) != 0U)
+  {
+    return QSPI_FLASH_OK;
+  }
+
+  sr2 |= W25Q64_SR2_QE;
+  return QSPI_Flash_WriteStatusReg2(hqspi, sr2);
+}
+/* Function end: QSPI_Flash_EnsureQuadEnable --------------------------------- */
 
 /* Function start: QSPI_Flash_WriteEnable ---------------------------------- */
 static QSPI_Flash_StatusTypeDef QSPI_Flash_WriteEnable(QSPI_HandleTypeDef *hqspi)

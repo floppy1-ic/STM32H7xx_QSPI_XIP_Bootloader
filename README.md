@@ -194,9 +194,9 @@ Pin assignments must match **`STM32H7xx_QSPI.ioc`** and `stm32h7xx_hal_msp.c`.
 | While-loop flag poll + reset | Done |
 | USART1 `uart_mcal` | Done |
 | Host UART `SP` trigger in idle loop | Done (stub load path) |
-| Real QSPI program in `qspi_new_app_load` | Planned |
-| Jump to app when flag 0 | Planned |
-| Host UART size + ACK + chunk program | Planned |
+| Real QSPI program in `qspi_new_app_load` | Done |
+| Jump to app when flag 0 | Done |
+| Host UART EC / WE / size + Y/N chunks | Done |
 
 ---
 
@@ -217,15 +217,15 @@ pip install -r tools/requirements.txt
 
 | Step | Host | Bootloader |
 |------|------|------------|
-| 1 | `SP` + 4-byte LE **size** | Idle: `app_load_enable()`, `qspi_new_app_load()` |
-| 2 | Wait | QSPI init, mmap off, sector erase |
-| 3 | Wait | **ACK** `0x79` — ready for data |
-| 4 | ≤256 B chunk | Write @ 0x0, **ACK** per chunk |
-| 5 | — | mmap on, flag 0, **reset** |
+| 1 | `SP` (repeat) | Idle → `qspi_new_app_load()` |
+| 2 | Wait | mmap off → `true` / `false` |
+| 3 | Wait | Erase 100 KB → `EC\r\n` |
+| 4 | Wait | `WE\r\n` |
+| 5 | **`S`** + 4-byte LE size | **`K`** / **`N`** |
+| 6 | ≤256 B chunks | **`Y`** / **`N`** per chunk |
+| 7 | — | mmap on, flag 0, **reset** |
 
 No ST-LINK required for application updates.
-
-**Firmware today:** idle loop recognizes **`SP`** on UART (`Peripherals/UART1`, `strcmp` in `main.c`). Full **size + ACK + chunk program** in `qspi_new_app_load()` is still planned.
 
 ### Usage
 

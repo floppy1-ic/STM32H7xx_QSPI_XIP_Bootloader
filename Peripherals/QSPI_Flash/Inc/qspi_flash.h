@@ -85,7 +85,8 @@ typedef enum
 } QSPI_Flash_StatusTypeDef;
 
 /**
-  * @brief  Reset the flash and verify its Winbond manufacturer ID.
+  * @brief  Reset the flash, verify Winbond manufacturer ID, and set SR2.QE if needed.
+  *         Quad Enable is required for quad I/O program/read and 0xEB memory-mapped mode.
   * @param  hqspi Pointer to the initialized QSPI handle.
   * @retval QSPI_Flash_StatusTypeDef QSPI_FLASH_OK on success, error code otherwise.
   */
@@ -194,7 +195,7 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_Read(QSPI_HandleTypeDef *hqspi, uint32_t Add
 
 /**
   * @brief  Enable memory-mapped mode (Quad I/O Fast Read 0xEB) - flash visible at 0x90000000.
-  *         Requires Quad-Enable (SR2.QE) to already be set in the flash chip.
+  *         Call QSPI_Flash_Init first so SR2.QE is set.
   * @param  hqspi Pointer to the initialized QSPI handle.
   * @retval QSPI_Flash_StatusTypeDef QSPI_FLASH_OK on success, error code otherwise.
   */

@@ -109,12 +109,13 @@ qspi_app_status_t qspi_app_jump_to_application(uint32_t appBaseAddress)
   SCB->VTOR = appBaseAddress;
   __set_MSP(initialSp);
 
-  /* Ensure VTOR/MSP writes are visible, then re-enable IRQs before calling the app. */
+  /* VTOR/MSP visible before handoff; leave IRQs masked (PRIMASK=1 from __disable_irq). */
   __DSB();
   __ISB();
-  __enable_irq();
 
-  /* Transfer control to the application Reset_Handler (does not return). */
+  /* Transfer control to the application Reset_Handler (does not return).
+   * Do not __enable_irq() here: an IRQ before app init would use the new VTOR
+   * while handlers/peripherals are not ready. The app enables IRQs after init. */
   appReset();
 
   /* Not reached */

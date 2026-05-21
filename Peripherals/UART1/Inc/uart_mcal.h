@@ -18,10 +18,10 @@
 extern "C" {
 #endif
 
-/** Blocking HAL timeout (ms) for one byte TX/RX. */
+/** Blocking HAL timeout (ms) for TX. */
 #define UART_MCAL_IO_TIMEOUT_MS   1000U
 
-/** Short timeout (ms) for idle-loop UART poll (no byte available). */
+/** Per-byte timeout (ms) for uart_recv_string poll (does not block forever). */
 #define UART_MCAL_POLL_TIMEOUT_MS  10U
 
 /**
@@ -39,22 +39,15 @@ HAL_StatusTypeDef uart_send_char(char c);
 HAL_StatusTypeDef uart_send_string(char *str);
 
 /**
-  * @brief  Receive one character on USART1 (blocking).
-  * @param  c Pointer to store the received byte; must not be NULL.
+  * @brief  Receive one byte on USART1 (blocking, HAL_UART_Receive with HAL_MAX_DELAY).
+  * @param  c  Pointer to store the received byte; must not be NULL.
   * @retval HAL_OK on success, HAL_ERROR on NULL or HAL failure.
   */
 HAL_StatusTypeDef uart_recv_char(char *c);
 
 /**
-  * @brief  Receive one character with a custom timeout (for polling).
-  * @param  c           Pointer to store the received byte.
-  * @param  timeout_ms  HAL_UART_Receive timeout in milliseconds.
-  * @retval HAL_OK on success, HAL_ERROR otherwise.
-  */
-HAL_StatusTypeDef uart_recv_char_timeout(char *c, uint32_t timeout_ms);
-
-/**
-  * @brief  Receive characters until newline, buffer full, or per-byte poll timeout.
+  * @brief  Poll RX for a line (non-blocking between calls; UART_MCAL_POLL_TIMEOUT_MS per byte).
+  *         Use uart_recv_char() when you must block until one byte arrives.
   * @param  buff  Destination buffer (NUL-terminated).
   * @param  size  Buffer size in bytes (including NUL).
   * @retval Number of characters received (excluding NUL), or 0 if none.

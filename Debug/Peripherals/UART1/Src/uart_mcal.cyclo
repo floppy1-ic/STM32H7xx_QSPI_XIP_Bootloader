@@ -1,5 +1,5 @@
-../Peripherals/UART1/Src/uart_mcal.c:13:19:uart_send_char	1
-../Peripherals/UART1/Src/uart_mcal.c:18:19:uart_send_string	4
-../Peripherals/UART1/Src/uart_mcal.c:41:19:uart_recv_char_timeout	2
-../Peripherals/UART1/Src/uart_mcal.c:51:19:uart_recv_char	1
+../Peripherals/UART1/Src/uart_mcal.c:13:26:uart_recv_byte	1
+../Peripherals/UART1/Src/uart_mcal.c:18:19:uart_send_char	1
+../Peripherals/UART1/Src/uart_mcal.c:23:19:uart_send_string	4
+../Peripherals/UART1/Src/uart_mcal.c:46:19:uart_recv_char	2
 ../Peripherals/UART1/Src/uart_mcal.c:56:10:uart_recv_string	8

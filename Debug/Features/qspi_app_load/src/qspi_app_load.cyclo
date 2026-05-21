@@ -1,4 +1,11 @@
 ../Drivers/CMSIS/Include/core_cm7.h:2156:34:__NVIC_SystemReset	1
-../Features/qspi_app_load/src/qspi_app_load.c:20:6:qspi_app_erase_flash_sector	1
-../Features/qspi_app_load/src/qspi_app_load.c:25:6:qspi_app_write_flash	3
-../Features/qspi_app_load/src/qspi_app_load.c:35:6:qspi_new_app_load	0
+../Features/qspi_app_load/src/qspi_app_load.c:45:6:qspi_app_erase_flash_sector	1
+../Features/qspi_app_load/src/qspi_app_load.c:50:6:qspi_app_write_flash	3
+../Features/qspi_app_load/src/qspi_app_load.c:60:13:flash_uart_wait_tx_done	3
+../Features/qspi_app_load/src/qspi_app_load.c:75:13:flash_uart_send_ack	2
+../Features/qspi_app_load/src/qspi_app_load.c:85:13:flash_uart_recv_byte	1
+../Features/qspi_app_load/src/qspi_app_load.c:90:13:flash_uart_recv_exact	3
+../Features/qspi_app_load/src/qspi_app_load.c:108:13:flash_receive_image_size	6
+../Features/qspi_app_load/src/qspi_app_load.c:141:13:flash_cleaning	3
+../Features/qspi_app_load/src/qspi_app_load.c:163:13:flash_writing	8
+../Features/qspi_app_load/src/qspi_app_load.c:220:6:qspi_new_app_load	3
