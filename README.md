@@ -2,6 +2,8 @@
 
 Bootloader in **128 KB internal flash** (`0x08000000`). Application image on external **Winbond W25Q64** (8 MB), executed from **XIP** `0x90000000` after memory-mapped mode.
 
+**Status:** Bootloader bring-up is **complete** — QSPI init, UART program, indirect + mmap vector reads, and jump handoff are verified. The **application** (e.g. Arundhati linked @ `0x90000000`) is a **separate project**; after jump, startup/cache/MPU in that app must be correct.
+
 Full design (flowcharts, memory map, checklist): **[external_bootloader_plan.html](external_bootloader_plan.html)** — open in a browser.
 
 ---
@@ -13,8 +15,8 @@ STM32H7xx_qspi_flash/
 ├── Core/Src/main.c                 Boot flow, LCD, flag check, idle poll
 ├── Features/
 │   ├── app_shared_ram/             Load flag in Backup SRAM (0 / 1)
-│   ├── qspi_app_load/              qspi_new_app_load() — stub today
-│   └── qspi_app_jump/              Jump to app @ 0x90000000 (ready, not wired in main)
+│   ├── qspi_app_load/              UART program session (qspi_new_app_load)
+│   └── qspi_app_jump/              Validate + jump to app @ 0x90000000
 ├── Peripherals/
 │   ├── QSPI_Flash/                 W25Q64 driver (erase / write / mmap)
 │   ├── SPI4_LCD/                   ST7735 + TIM1 backlight
@@ -45,6 +47,7 @@ STM32H7xx_qspi_flash/
 
 | API | Effect |
 |-----|--------|
+| `app_load_flag_sanitize()` | If word is not **0** or **1**, write **0** (cold BKPSRAM garbage) |
 | `app_load_enable()` | Write **1** @ `0x38800000` |
 | `app_load_disable()` | Write **0** |
 | `app_load_is_enabled()` | `true` if **1** |
@@ -60,28 +63,34 @@ Survives **soft reset** (`NVIC_SystemReset` / `system_reset()` in `main.c`). Cle
 
 1. CubeMX init (GPIO, QSPI, SPI4, TIM1, USART1).
 2. LCD welcome: **Saptashri Secure / XIP Bootloader**.
-3. Read flag:
-   - **1** → `qspi_new_app_load()` (does not return).
-   - **0** → LCD **App load: OFF / Jump to app** → mmap + validate @ `0x90000000` → jump if valid, else bootloader poll (planned; LCD + poll done today).
-   - Invalid → LCD warning, `app_load_disable()`.
-4. **`while(1)`:** heartbeat on **PE3**; UART idle receive — if string is **`SP`**, `app_load_enable()` then `qspi_new_app_load()`; if flag **1**, call `qspi_new_app_load()`.
+3. `app_load_flag_sanitize()` — invalid BKPSRAM word → **0**.
+4. `QSPI_Flash_Init()` — reset W25Q, ID check, **Quad Enable (SR2.QE)**. On fail → LCD **`QSPI init fail`** → idle.
+5. Branch on flag:
+   - **1** → `qspi_new_app_load()` (UART program; see below).
+   - **0** → `qspi_app_is_valid_at_flash()` (indirect `0x0B` read @ offset 0). If invalid → LCD **`No valid app`**. If valid → mmap; on mmap fail → **`Mmap fail`**. Else cache cleanup → `qspi_app_jump_to_application(0x90000000)`; if jump returns → mmap off → idle.
+6. **`while(1)`:** PE3 heartbeat; `uart_recv_string` — if **`SP`** → `app_load_enable()` + `qspi_new_app_load()`.
 
-### `qspi_new_app_load()` (stub)
+### `qspi_new_app_load()` (UART program)
 
-Today (`Features/qspi_app_load`):
+Matches `tools/saptashri_flash.py`:
 
-1. LCD: **App load : Wait...** then stub delay.
-2. `app_load_disable()` → flag **0**.
-3. `NVIC_SystemReset()`.
+1. Mmap off → host sees `true\r\n` / `false\r\n`.
+2. Erase **full 8 MB** W25Q64 @ offset 0 (**128 × 64 KB** block erases) → `EC\r\n` (allow **~1–3 min**; host timeout **300 s**).
+3. `WE\r\n` → host sends **`S`** + 4-byte LE size → **`K`** / **`N`** (max image size = 8 MB).
+4. Data in **256-byte** chunks → **`Y`** / **`N`** per chunk.
+5. **Success:** LCD **Load OK** → flag **0** → mmap on → **reset** → boot tries jump.
+6. **Failure:** flag stays **1**, **mmap off**, **return** to idle (no reset; host sees **`N`** or **EC** timeout).
 
-**Planned:** disable mmap → erase/write `app.bin` @ offset 0 → clear flag → mmap on → soft reset.
+### LCD messages (boot / load)
 
-### Jump path when flag is 0 (planned in firmware)
-
-1. LCD **App load: OFF / Jump to app** (done).
-2. `QSPI_Flash_EnableMemoryMappedMode` → `qspi_app_is_valid(0x90000000)`.
-3. **Valid** → `qspi_app_jump_to_application()` → application running.
-4. **Invalid** → stay in bootloader: PE3 heartbeat, poll flag for load request.
+| Message | Meaning |
+|---------|--------|
+| `QSPI init fail` | `QSPI_Flash_Init` failed |
+| `No valid app` | No valid vector table in external flash |
+| `Mmap fail` | Valid vectors but mmap could not start |
+| `Jump to QSPI app` | Handoff to application |
+| `Erase failed` / `Program failed` | UART load aborted |
+| `Load OK` | Program OK, about to reset |
 
 ---
 
@@ -182,21 +191,50 @@ Pin assignments must match **`STM32H7xx_QSPI.ioc`** and `stm32h7xx_hal_msp.c`.
 
 ---
 
+## QSPI memory-mapped mode (XIP read fix)
+
+`QSPI_Flash_EnableMemoryMappedMode()` uses **WeAct `02-ExtMem_Boot`**-style settings for command **`0xEB`** (not the old 6-dummy / `0x00` alt-byte config, which shifted bytes at `0x90000000`).
+
+| Parameter | Value |
+|-----------|--------|
+| Instruction | `0xEB` fast read quad I/O |
+| Alternate byte | **`0xEF`** (`W25Q64_MMAP_CONTINUOUS_READ_ALT`) |
+| Dummy cycles | **4** (`W25Q64_DUMMY_CYCLES_READ_QUAD_IO`, WeAct SPI: 6−2) |
+| Indirect read `0x0B` | Unchanged (**8** dummy cycles) |
+
+**Verified:** CmdRd and Mmap both report the same SP/PC (e.g. `SP=24080000`, `PC=90000C5D` for Arundhati). Bootloader jump uses the mmap view.
+
+---
+
+## Application image requirements
+
+| Requirement | Detail |
+|-------------|--------|
+| Linker FLASH | **`0x90000000`**, length ≤ 8 MB |
+| Initial SP | Must match app RAM (e.g. **`0x24080000`**) |
+| Reset vector | Thumb address in flash (e.g. **`0x90000C5D`**); host tool may print **`0x90000C5C`** (`& ~1` for display) |
+| `SystemInit` | Set **`SCB->VTOR = 0x90000000`**; re-enable **I/D cache** after jump (bootloader disables cache before handoff) |
+| Hex / program | Image programs @ QSPI offset **0**; only bytes in the hex file are written (gaps stay `0xFF` after erase) |
+
+If jump reaches **HardFault** at **`0x90000A8C`**, that is the app’s **`HardFault_Handler`** (vector word **`0x90000A8D`** = handler + Thumb bit), not a wrong bootloader reset address.
+
+---
+
 ## Status summary
 
 | Item | Status |
 |------|--------|
-| Bootloader @ `0x08000000` | Done |
-| QSPI W25Q64 driver | Done |
-| `app_shared_ram` flag API | Done |
-| LCD welcome + flag display | Done |
-| `qspi_new_app_load()` stub | Done |
-| While-loop flag poll + reset | Done |
-| USART1 `uart_mcal` | Done |
-| Host UART `SP` trigger in idle loop | Done (stub load path) |
-| Real QSPI program in `qspi_new_app_load` | Done |
-| Jump to app when flag 0 | Done |
-| Host UART EC / WE / size + Y/N chunks | Done |
+| Bootloader @ `0x08000000` (128 KB) | Done |
+| `QSPI_Flash_Init` + QE on boot | Done |
+| `app_load_flag_sanitize` | Done |
+| UART load: **8 MB** erase + program + ACK | Done |
+| Load fail: no reset, flag 1, mmap off | Done |
+| Validate before mmap (`qspi_app_is_valid_at_flash`) | Done |
+| Mmap XIP aligned with WeAct (`0xEF`, 4 dummies) | Done |
+| Jump when flag 0 (`qspi_app_jump_to_application`) | Done |
+| Host tool `saptashri_flash.py` (300 s erase timeout) | Done |
+| **Application** @ `0x90000000` (separate project) | Build & debug in app project |
+| Optional: peripheral deinit before jump | Not done |
 
 ---
 
@@ -217,15 +255,15 @@ pip install -r tools/requirements.txt
 
 | Step | Host | Bootloader |
 |------|------|------------|
-| 1 | `SP` (repeat) | Idle → `qspi_new_app_load()` |
-| 2 | Wait | mmap off → `true` / `false` |
-| 3 | Wait | Erase 100 KB → `EC\r\n` |
+| 1 | `SP` (repeat until ready) | Idle: `app_load_enable()` → `qspi_new_app_load()`; or boot with flag **1** |
+| 2 | Wait | Mmap off → `true\r\n` or `false\r\n` |
+| 3 | Wait | Erase full 8 MB (64 KB blocks) → `EC\r\n` (~1–3 min) |
 | 4 | Wait | `WE\r\n` |
 | 5 | **`S`** + 4-byte LE size | **`K`** / **`N`** |
 | 6 | ≤256 B chunks | **`Y`** / **`N`** per chunk |
-| 7 | — | mmap on, flag 0, **reset** |
+| 7 | — | **Success:** flag 0, mmap on, **reset**. **Fail:** flag 1, stay in bootloader |
 
-No ST-LINK required for application updates.
+No ST-LINK required for application updates after the bootloader is programmed once.
 
 ### Usage
 
@@ -241,9 +279,12 @@ python tools/saptashri_flash.py -p COM5 --info app.hex
 
 | Module | Role |
 |--------|------|
+| `Peripherals/QSPI_Flash/` | Init, QE, erase, write, mmap on/off |
 | `Peripherals/UART1/` | `uart_mcal` — send/recv on USART1 |
-| `Core/Src/main.c` | Idle poll: `uart_recv_string` + **`SP`** → load |
-| `Features/qspi_app_load/` | Erase, UART RX, `QSPI_Flash_Write` (stub / planned) |
+| `Core/Src/main.c` | Boot branches + idle **`SP`** trigger |
+| `Features/qspi_app_load/` | Full UART program session |
+| `Features/qspi_app_jump/` | Indirect validate + XIP jump |
+| `Features/app_shared_ram/` | BKPSRAM flag + sanitize |
 
 Internal bootloader @ `0x08000000`: flash once via CubeIDE / ST-LINK.
 

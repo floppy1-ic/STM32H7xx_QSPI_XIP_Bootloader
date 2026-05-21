@@ -335,7 +335,7 @@
 
   <header class="doc-header" role="banner">
     <h1>Saptashri Secure XIP Bootloader</h1>
-    <p class="doc-tagline">STM32H750VBTx · Internal flash boot · W25Q64 XIP · Backup SRAM load flag · USART1 host UART</p>
+    <p class="doc-tagline">STM32H750VBTx · Bootloader verified · 8 MB erase · WeAct mmap XIP · BKPSRAM · saptashri_flash.py</p>
     <p class="doc-meta">
       Design plan · Copyright © 2026 Sibun · <a href="README.md">README.md</a><br />
       <code>STM32H7xx_qspi_flash/external_bootloader_plan.html</code>
@@ -356,17 +356,59 @@
       The load request is a single word in <strong>Backup SRAM</strong> @ <code>0x38800000</code> (survives soft reset):
     </p>
     <ul>
-      <li><strong><code>1</code></strong> — Run <code>qspi_new_app_load()</code> (program external flash; stub shows LCD then reset today).</li>
-      <li><strong><code>0</code></strong> — LCD “Jump to app” → mmap → validate @ <code>0x90000000</code> → jump if valid; else bootloader poll (PE3 heartbeat).</li>
+      <li><strong><code>1</code></strong> — <code>qspi_new_app_load()</code>: mmap off, erase <strong>full 8&nbsp;MB</strong> (128×64&nbsp;KB blocks), UART program @ offset 0. Success → flag 0 + reset; failure → flag 1 + mmap off + idle.</li>
+      <li><strong><code>0</code></strong> — <code>QSPI_Flash_Init</code> → validate vectors (indirect <code>0x0B</code>) → WeAct mmap → jump @ <code>0x90000000</code>; else LCD status + idle (PE3 + UART <code>SP</code>).</li>
     </ul>
     <p>
-      In the idle loop, <code>uart_recv_string()</code> (<code>Peripherals/UART1/uart_mcal</code>) receives host text.
-      If the string is <strong><code>SP</code></strong>, firmware calls <code>app_load_enable()</code> then
-      <code>qspi_new_app_load()</code> → clear flag → <strong>soft reset</strong> (stub today).
+      On every boot: <code>app_load_flag_sanitize()</code> forces invalid BKPSRAM words to <strong>0</strong>.
+      <code>QSPI_Flash_Init</code> resets the chip, checks Winbond ID, and sets <strong>SR2.QE</strong> if needed.
     </p>
     <p>
+      Idle loop: <code>uart_recv_string</code> — if <strong><code>SP</code></strong>, <code>app_load_enable()</code> then <code>qspi_new_app_load()</code>.
       Host tool: <code>tools/saptashri_flash.py</code> (see <a href="README.md#host-flash-tool--saptashri_flashpy">README</a>).
-      Full protocol: <code>SP</code> + 4-byte size, ACK <code>0x79</code>, 256-byte chunks — planned inside <code>qspi_new_app_load()</code>.
+      Protocol: <code>true</code>/<code>false</code>, <code>EC</code>, <code>WE</code>, <code>S</code>+size → <code>K</code>/<code>N</code>, chunks → <code>Y</code>/<code>N</code>.
+    </p>
+    <div class="note" style="border-left-color:var(--ok);background:rgba(63,185,80,0.08);">
+      <strong>Bootloader verified:</strong> CmdRd and Mmap reads match (e.g. <code>SP=24080000</code>, <code>PC=90000C5D</code>).
+      Old mmap settings (6 dummy cycles, alt <code>0x00</code>) caused a byte slip at XIP; fixed per WeAct (alt <code>0xEF</code>, 4 dummies).
+      <strong>Application</strong> is a separate build — after jump, app must set VTOR, re-enable cache, and run <code>SystemInit</code>.
+    </div>
+  </section>
+
+  <section>
+    <h2>QSPI memory-mapped (XIP) configuration</h2>
+    <p style="margin-top:0;color:var(--muted);font-size:0.92rem;">
+      <code>Peripherals/QSPI_Flash/Src/qspi_flash.c</code> — <code>QSPI_Flash_EnableMemoryMappedMode()</code>
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Parameter</th><th>Before (broken XIP)</th><th>Current (WeAct)</th></tr></thead>
+        <tbody>
+          <tr><td>Command</td><td><code>0xEB</code></td><td><code>0xEB</code></td></tr>
+          <tr><td>Alternate byte</td><td><code>0x00</code></td><td><strong><code>0xEF</code></strong></td></tr>
+          <tr><td>Dummy cycles</td><td>6</td><td><strong>4</strong> (WeAct SPI: 6−2)</td></tr>
+          <tr><td>Indirect <code>0x0B</code></td><td>8 dummies</td><td>8 dummies (unchanged)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Application image (separate project)</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Item</th><th>Requirement</th></tr></thead>
+        <tbody>
+          <tr><td>Linker FLASH</td><td><code>ORIGIN = 0x90000000</code>, ≤ 8 MB</td></tr>
+          <tr><td>Stack pointer</td><td>Word @ <code>0x90000000</code> (e.g. <code>0x24080000</code>)</td></tr>
+          <tr><td>Reset handler</td><td>Thumb vector @ <code>0x90000004</code> (e.g. <code>0x90000C5D</code>)</td></tr>
+          <tr><td>After bootloader jump</td><td><code>VTOR = 0x90000000</code>, enable I/D cache in <code>SystemInit</code></td></tr>
+          <tr><td>Hex gaps</td><td>After 8 MB erase, only programmed bytes are non-<code>FF</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:0.88rem;color:var(--muted);">
+      Map file symbol <code>HardFault_Handler</code> @ <code>0x90000A8C</code> → vector entry <code>0x90000A8D</code> (Thumb +1). Not the same as bootloader <code>Reset_Handler</code>.
     </p>
   </section>
 
@@ -411,11 +453,11 @@
     <h2>Six rules (boot plan)</h2>
     <ol class="steps">
       <li><strong>Bootloader @ 0x08000000</strong> — Linker <code>STM32H750VBTX_FLASH.ld</code>, 128&nbsp;KB.</li>
-      <li><strong>Check flag first</strong> — <code>app_load_is_enabled()</code> / <code>app_load_is_disabled()</code> on Backup SRAM @ <code>0x38800000</code>.</li>
-      <li><strong>Flag = 1</strong> — <code>qspi_new_app_load()</code>: today LCD stub 5&nbsp;s → <code>app_load_disable()</code> → reset; later QSPI erase/write @ 0.</li>
-      <li><strong>Flag = 0</strong> — LCD “Jump to app” → mmap + validate; if OK → <code>qspi_app_jump_to_application()</code>; if not → bootloader poll (PE3).</li>
-      <li><strong>While loop</strong> — PE3 heartbeat; <code>uart_recv_string</code> + <code>strcmp(..., "SP")</code> → <code>app_load_enable()</code> + <code>qspi_new_app_load()</code>; or if flag already <strong>1</strong>, call load.</li>
-      <li><strong>After real program</strong> — Disable mmap → program → <code>app_load_disable()</code> → mmap on → soft reset; next boot flag 0 → jump.</li>
+      <li><strong>Sanitize flag</strong> — <code>app_load_flag_sanitize()</code> if word ∉ {0, 1}.</li>
+      <li><strong>QSPI init</strong> — <code>QSPI_Flash_Init()</code>: reset, ID, Quad Enable.</li>
+      <li><strong>Flag = 1</strong> — Full UART program in <code>qspi_new_app_load()</code>; success resets with flag 0.</li>
+      <li><strong>Flag = 0</strong> — <code>qspi_app_is_valid_at_flash</code> → mmap → <code>qspi_app_jump_to_application</code> or stay in BL.</li>
+      <li><strong>While loop</strong> — PE3 heartbeat; host <code>SP</code> → load (boot with flag 1 also enters load without <code>SP</code>).</li>
     </ol>
     <div class="note">
       <strong>Deferred:</strong> Internal flash sector 7 and external QSPI last-sector flags were removed — they conflicted with ST-LINK debug when tested from <code>main</code> every boot.
@@ -425,8 +467,8 @@
   <section>
     <h2>Boot flow chart</h2>
     <div class="legend">
-      <span><i class="dot-done"></i> Implemented today</span>
-      <span><i class="dot-plan"></i> Planned (dashed in diagram)</span>
+      <span><i class="dot-done"></i> Implemented (bootloader firmware)</span>
+      <span><i class="dot-plan"></i> Separate application project</span>
     </div>
     <div class="diagram-wrap flow-primary mermaid-pending" id="flow-boot">
       <pre class="mermaid">
@@ -434,43 +476,42 @@ flowchart TD
     reset([Power-on or soft reset])
     bl[Bootloader at 0x08000000]
     periph[MX_GPIO QUADSPI SPI4 TIM1 USART1]
-    lcdHi[LCD welcome Saptashri Secure XIP]
-    flag{Flag word0 at 0x38800000}
+    lcdHi[LCD welcome]
+    sanitize[app_load_flag_sanitize]
+    qinit{QSPI_Flash_Init QE}
+    flag{Flag at 0x38800000}
 
-    reset --> bl
-    bl --> periph
-    periph --> lcdHi
-    lcdHi --> flag
+    reset --> bl --> periph --> lcdHi --> sanitize --> qinit
+    qinit -->|fail| lcdInitFail[LCD QSPI init fail]
+    lcdInitFail --> idle
 
-    flag -->|equals 1| loadStub["qspi_new_app_load stub LCD 5s"]
-    loadStub --> clr[app_load_disable writes 0]
-    clr --> softRst[NVIC_SystemReset]
+    qinit -->|ok| flag
+    flag -->|1| loadSess[qspi_new_app_load UART]
+    loadSess -->|success| softRst[flag 0 NVIC_SystemReset]
+    loadSess -->|fail| idle
     softRst --> bl
 
-    flag -->|equals 0| lcdOff[LCD App load OFF Jump to app]
-    lcdOff --> mmapJump[Enable mmap validate jump]
-    mmapJump --> valid{Valid app at 0x90000000}
-    valid -->|Yes| xipJump[qspi_app_jump_to_application]
-    xipJump --> appAddr([Application at 0x90000000])
-    appAddr --> appRun([Application running])
-    valid -->|No| idle[Idle PE3 heartbeat uart_recv_string]
-    idle -->|host sends SP| spTrig[app_load_enable]
-    spTrig --> loadStub
-    idle -->|flag becomes 1| loadStub
+    flag -->|0| valid{qspi_app_is_valid_at_flash}
+    valid -->|no| lcdNoApp[LCD No valid app]
+    lcdNoApp --> idle
+    valid -->|yes| mmap{EnableMemoryMappedMode}
+    mmap -->|fail| lcdMmap[LCD Mmap fail]
+    lcdMmap --> idle
+    mmap -->|ok| jump[qspi_app_jump_to_application]
+    jump --> appRun([Application at 0x90000000])
 
-    flag -->|invalid| fix[LCD invalid app_load_disable]
-    fix --> lcdOff
+    idle[Idle PE3 uart_recv_string]
+    idle -->|SP| spTrig[app_load_enable + load]
+    spTrig --> loadSess
 
     classDef done fill:#1a3d2e,stroke:#3fb950,color:#e6edf3
     classDef plan fill:#2a2438,stroke:#a371f7,color:#e6edf3,stroke-dasharray:5 5
-    class bl,periph,lcdHi,flag,loadStub,clr,softRst,lcdOff,idle,spTrig,fix done
-    class mmapJump,valid,xipJump,appAddr,appRun plan
+    class bl,periph,lcdHi,sanitize,qinit,flag,loadSess,softRst,valid,mmap,jump,idle,spTrig,lcdInitFail,lcdNoApp,lcdMmap done
+    class appRun plan
       </pre>
     </div>
     <p style="font-size:0.88rem;color:var(--muted);margin:0.5rem 0 0;">
-      Solid green: implemented today (welcome LCD, flag branch, load stub, idle PE3 + UART <code>SP</code> trigger).
-      Purple dashed: planned (mmap + validate + jump on flag&nbsp;0; real QSPI program + ACK protocol on flag&nbsp;1).
-      Flag&nbsp;0 path: LCD “Jump to app” → validate → run app or stay in bootloader with heartbeat and UART poll.
+      Green: bootloader firmware (P0 complete). Purple dashed: application image you build and flash @ offset 0 / XIP <code>0x90000000</code>.
     </p>
   </section>
 
@@ -479,22 +520,37 @@ flowchart TD
     <div class="diagram-wrap mermaid-pending" id="flow-seq">
       <pre class="mermaid">
 sequenceDiagram
-    participant Host as Host or tool
-    participant BK as Backup SRAM 0x38800000
+    participant Host as saptashri_flash.py
+    participant BK as Backup SRAM
     participant BL as Bootloader
-    participant QSPI as W25Q64 driver
-    participant EXT as External flash
+    participant QSPI as QSPI_Flash driver
+    participant EXT as W25Q64
 
-    Host->>BL: USART1 send SP trigger done today
+    Host->>BL: SP until true
     BL->>BL: app_load_enable
-    BL->>BL: qspi_new_app_load stub LCD
-    Note over Host,BL: Planned SP plus 4 byte size ACK 0x79 chunks
-    BL->>BK: app_load_disable writes 0
-    BL->>BL: NVIC_SystemReset
-    Note over BL,BK: Next boot flag 0
-    BL->>BK: Read flag equals 0
-    BL->>QSPI: EnableMemoryMappedMode planned
-    BL->>BL: Jump to 0x90000000 planned
+    BL->>QSPI: DisableMemoryMappedMode
+    BL->>Host: true
+    BL->>EXT: Erase 8 MB 64K blocks
+    BL->>Host: EC
+    BL->>Host: WE
+    Host->>BL: S plus 4 byte size
+    BL->>Host: K
+    loop Each 256 B chunk
+        Host->>BL: data
+        BL->>EXT: Write
+        BL->>Host: Y or N
+    end
+    alt Program OK
+        BL->>BK: flag 0
+        BL->>QSPI: EnableMemoryMappedMode
+        BL->>BL: NVIC_SystemReset
+        BL->>QSPI: Init validate mmap
+        BL->>BL: Jump 0x90000000
+    else Program fail
+        BL->>BK: flag 1
+        BL->>QSPI: DisableMemoryMappedMode
+        Note over BL: Return to idle no reset
+    end
       </pre>
     </div>
   </section>
@@ -506,16 +562,16 @@ sequenceDiagram
       <dd><code>STM32H750VBTX_FLASH.ld</code>: <code>FLASH ORIGIN = 0x08000000, LENGTH = 128K</code></dd>
 
       <dt>2 — Load flag (Backup SRAM)</dt>
-      <dd><code>Features/app_shared_ram/</code> — <code>app_load_enable</code>, <code>app_load_disable</code>, <code>app_load_is_enabled</code>, <code>app_load_is_disabled</code> @ <code>0x38800000</code> (values <strong>1</strong> / <strong>0</strong>).</dd>
+      <dd><code>Features/app_shared_ram/</code> — <code>app_load_flag_sanitize</code>, <code>app_load_enable</code> / <code>disable</code>, <code>is_enabled</code> / <code>is_disabled</code> @ <code>0x38800000</code>.</dd>
 
       <dt>3 — App load session</dt>
-      <dd><code>Features/qspi_app_load/</code> — <code>qspi_new_app_load()</code> (stub: LCD 5&nbsp;s, disable flag, reset). Planned: mmap off + erase/write.</dd>
+      <dd><code>Features/qspi_app_load/</code> — <code>qspi_new_app_load()</code>: mmap off, erase 8 MB (64 KB blocks), UART RX, write; success → reset; fail → abort (flag 1, mmap off).</dd>
 
       <dt>4 — QSPI driver</dt>
-      <dd><code>Peripherals/QSPI_Flash/</code> — <code>QSPI_Flash_DisableMemoryMappedMode</code>, erase, write, mmap on.</dd>
+      <dd><code>Peripherals/QSPI_Flash/</code> — <code>QSPI_Flash_Init</code> (reset, ID, QE), erase, write, mmap on/off.</dd>
 
       <dt>5 — Jump when flag 0</dt>
-      <dd><code>Features/qspi_app_jump/</code> — <code>qspi_app_is_valid</code>, <code>qspi_app_jump_to_application</code> (not called from <code>main.c</code> yet).</dd>
+      <dd><code>Features/qspi_app_jump/</code> — <code>qspi_app_is_valid_at_flash</code>, <code>qspi_app_jump_to_application</code> (wired in <code>main.c</code>).</dd>
 
       <dt>6 — Soft reset</dt>
       <dd><code>system_reset()</code> in <code>Core/Src/main.c</code>; also <code>NVIC_SystemReset()</code> inside <code>qspi_new_app_load()</code>.</dd>
@@ -597,11 +653,13 @@ sequenceDiagram
       <table>
         <thead><tr><th>Step</th><th>Host</th><th>Bootloader</th><th>Status</th></tr></thead>
         <tbody>
-          <tr><td>1</td><td><code>SP</code> + 4-byte LE <strong>size</strong></td><td><code>app_load_enable()</code>, <code>qspi_new_app_load()</code></td><td style="color:var(--warn)"><code>SP</code> only today</td></tr>
-          <tr><td>2</td><td>Wait</td><td>QSPI init, mmap off, sector erase</td><td style="color:var(--planned)">Planned</td></tr>
-          <tr><td>3</td><td>Wait</td><td>ACK <code>0x79</code> — ready for data</td><td style="color:var(--planned)">Planned</td></tr>
-          <tr><td>4</td><td>≤256 B chunk</td><td>Write @ <code>0x0</code>, ACK per chunk</td><td style="color:var(--planned)">Planned</td></tr>
-          <tr><td>5</td><td>—</td><td>mmap on, flag 0, reset → app @ <code>0x90000000</code></td><td style="color:var(--planned)">Planned</td></tr>
+          <tr><td>1</td><td><code>SP</code> (repeat)</td><td><code>app_load_enable()</code>, enter load</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>2</td><td>Wait</td><td>Mmap off → <code>true</code> / <code>false</code></td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>3</td><td>Wait (up to ~300 s)</td><td>Erase 8 MB → <code>EC\r\n</code></td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>4</td><td>Wait</td><td><code>WE\r\n</code></td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>5</td><td><code>S</code> + 4-byte LE size</td><td><code>K</code> / <code>N</code></td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>6</td><td>≤256 B chunks</td><td><code>Y</code> / <code>N</code> per chunk</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>7</td><td>—</td><td>Success: flag 0, mmap, reset. Fail: flag 1, idle</td><td style="color:var(--ok)">Done</td></tr>
         </tbody>
       </table>
     </div>
@@ -617,21 +675,20 @@ sequenceDiagram
       <table>
         <thead><tr><th>Item</th><th>Status</th></tr></thead>
         <tbody>
-          <tr><td>Bootloader linked at 0x08000000</td><td style="color:var(--ok)">Done</td></tr>
-          <tr><td>QSPI driver (erase / write / mmap)</td><td style="color:var(--ok)">Done</td></tr>
-          <tr><td>App jump helper</td><td style="color:var(--ok)">Done</td></tr>
-          <tr><td><code>app_shared_ram</code> flag (1 / 0) + API</td><td style="color:var(--ok)">Done</td></tr>
-          <tr><td>LCD welcome + flag status screen</td><td style="color:var(--ok)">Done</td></tr>
-          <tr><td><code>qspi_new_app_load()</code> stub</td><td style="color:var(--ok)">Done (stub)</td></tr>
-          <tr><td>While-loop flag poll</td><td style="color:var(--ok)">Done</td></tr>
-          <tr><td><code>Peripherals/UART1</code> <code>uart_mcal</code></td><td style="color:var(--ok)">Done</td></tr>
-          <tr><td>Host UART <code>SP</code> trigger (idle loop)</td><td style="color:var(--ok)">Done (stub load)</td></tr>
-          <tr><td>Real QSPI program in <code>qspi_new_app_load</code></td><td style="color:var(--planned)">Planned</td></tr>
-          <tr><td>Host UART size + ACK + chunk program</td><td style="color:var(--planned)">Planned</td></tr>
-          <tr><td>Jump when flag 0</td><td style="color:var(--planned)">Planned</td></tr>
-          <tr><td><code>QSPI_Flash_Init</code> in boot path</td><td style="color:var(--planned)">Planned</td></tr>
-          <tr><td>Internal / QSPI flag modules</td><td style="color:var(--muted)">Removed</td></tr>
-          <tr><td>External app linker @ 0x90000000</td><td style="color:var(--warn)">Separate project</td></tr>
+          <tr><td>P0-1 <code>QSPI_Flash_Init</code> on boot</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>P0-2 Quad Enable (SR2.QE)</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>P0-3 <code>app_load_flag_sanitize</code></td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>P0-4 Flag 1 → UART load</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>P0-5 Validate before mmap/jump</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>P0-6 Boot order (init → branch)</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>P0-7 LCD on mmap failure</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>P0-8 Load fail: no reset, flag 1, mmap off</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>P0-9 Full 8 MB erase before program</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>P0-10 WeAct mmap XIP (<code>0xEF</code>, 4 dummies)</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>Host <code>saptashri_flash.py</code> (8 MB, 300 s EC timeout)</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>Bootloader vector / jump handoff verified</td><td style="color:var(--ok)">Done</td></tr>
+          <tr><td>Application @ 0x90000000 (startup after jump)</td><td style="color:var(--warn)">Separate project</td></tr>
+          <tr><td>Optional: peripheral deinit before jump</td><td style="color:var(--planned)">Optional</td></tr>
         </tbody>
       </table>
     </div>
