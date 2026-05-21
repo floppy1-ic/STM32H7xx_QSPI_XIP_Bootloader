@@ -6,7 +6,7 @@
   *
   * Protocol (must match tools/saptashri_flash.py):
   *   1. Host: SP (repeat)     MCU: true\r\n | false\r\n
-  *   2. MCU: erase 8 MB       Host: wait EC\r\n
+  *   2. MCU: erase 8 MB (64 KB blocks)  Host: wait EC\r\n (timeout ~300 s)
   *   3. MCU: WE\r\n           Host: wait WE
   *   4. Host: 'S' + 4-byte LE size   MCU: 'K' | 'N'
   *   5. Host: data chunks     MCU: Y | N per chunk
