@@ -10,7 +10,9 @@
   */
 
 #include "qspi_app_jump.h"
+#include "qspi_flash.h"
 #include "stm32h7xx_hal.h"
+#include <string.h>
 
 /* Cortex-M vector table: word0 = initial SP, word1 = Reset_Handler -------- */
 #define QSPI_APP_JUMP_VECTOR_SP_OFFSET (0U)
@@ -42,6 +44,21 @@ static bool QSPI_App_Jump_IsStackPointerValid(uint32_t stackPointer)
   return true;
 }
 
+static bool QSPI_App_Jump_ValidateVectors(uint32_t initialSp, uint32_t resetHandler)
+{
+  if (!QSPI_App_Jump_IsStackPointerValid(initialSp))
+  {
+    return false;
+  }
+
+  if (!QSPI_App_Jump_IsThumbAddress(resetHandler))
+  {
+    return false;
+  }
+
+  return true;
+}
+
 bool qspi_app_is_valid(uint32_t appBaseAddress)
 {
   const uint32_t *vectors = (const uint32_t *)appBaseAddress;
@@ -56,17 +73,29 @@ bool qspi_app_is_valid(uint32_t appBaseAddress)
   initialSp = vectors[QSPI_APP_JUMP_VECTOR_SP_OFFSET / sizeof(uint32_t)];
   resetHandler = vectors[QSPI_APP_JUMP_VECTOR_PC_OFFSET / sizeof(uint32_t)];
 
-  if (!QSPI_App_Jump_IsStackPointerValid(initialSp))
+  return QSPI_App_Jump_ValidateVectors(initialSp, resetHandler);
+}
+
+bool qspi_app_is_valid_at_flash(QSPI_HandleTypeDef *hqspi, uint32_t flashByteOffset)
+{
+  uint8_t vectors[8];
+  uint32_t initialSp;
+  uint32_t resetHandler;
+
+  if (hqspi == NULL)
   {
     return false;
   }
 
-  if (!QSPI_App_Jump_IsThumbAddress(resetHandler))
+  if (QSPI_Flash_Read(hqspi, flashByteOffset, vectors, sizeof(vectors)) != QSPI_FLASH_OK)
   {
     return false;
   }
 
-  return true;
+  memcpy(&initialSp, &vectors[0], sizeof(initialSp));
+  memcpy(&resetHandler, &vectors[4], sizeof(resetHandler));
+
+  return QSPI_App_Jump_ValidateVectors(initialSp, resetHandler);
 }
 
 qspi_app_status_t qspi_app_jump_to_application(uint32_t appBaseAddress)

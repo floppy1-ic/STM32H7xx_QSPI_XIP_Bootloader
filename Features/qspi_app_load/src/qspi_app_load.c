@@ -6,11 +6,11 @@
   *
   * Protocol (must match tools/saptashri_flash.py):
   *   1. Host: SP (repeat)     MCU: true\r\n | false\r\n
-  *   2. MCU: erase 100 KB     Host: wait EC\r\n
+  *   2. MCU: erase 8 MB       Host: wait EC\r\n
   *   3. MCU: WE\r\n           Host: wait WE
   *   4. Host: 'S' + 4-byte LE size   MCU: 'K' | 'N'
   *   5. Host: data chunks     MCU: Y | N per chunk
-  *   6. MCU: flag 0, mmap on, reset
+  *   6. Success: flag 0, mmap on, reset. Failure: flag 1, mmap on, return to BL idle.
   *
   * @copyright
   * Copyright (c) 2026 Sibun. All rights reserved.
@@ -28,7 +28,8 @@ extern QSPI_HandleTypeDef hqspi;
 extern UART_HandleTypeDef huart1;
 
 #define FLASH_WRITE_CHUNK_BYTES       (256U)
-#define FLASH_CLEAN_SIZE_BYTES        (100U * 1024U)
+/* Full W25Q64 (8 MiB) erase window before program */
+#define FLASH_CLEAN_SIZE_BYTES        W25Q64_FLASH_SIZE
 #define FLASH_UART_FIRST_BYTE_MS      (30000U)
 #define FLASH_UART_NEXT_BYTE_MS       (100U)
 #define FLASH_POST_WE_DELAY_MS        (20U)
@@ -142,17 +143,18 @@ static bool flash_cleaning(void)
 {
   uint32_t offset;
 
-  lcd_stm32h7_message("Erasing 100 KB...\n");
+  lcd_stm32h7_message("Erasing 8 MB...\n");
 
   for (offset = QSPI_APP_LOAD_FLASH_BASE;
        offset < (QSPI_APP_LOAD_FLASH_BASE + FLASH_CLEAN_SIZE_BYTES);
-       offset += W25Q64_SECTOR_SIZE)
+       offset += W25Q64_BLOCK_64K_SIZE)
   {
-    if (!qspi_app_erase_flash_sector(offset))
+    if (QSPI_Flash_EraseBlock64K(&hqspi, offset) != QSPI_FLASH_OK)
     {
       (void)flash_uart_send_ack(FLASH_NACK);
       return false;
     }
+    HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_3);
   }
 
   (void)uart_send_string((char *)FLASH_RESP_ERASE_COMPLETE);
@@ -217,6 +219,27 @@ static bool flash_writing(void)
   return true;
 }
 
+/**
+  * @brief  P0-8: Abort load without reset; keep flag 1 so next boot retries load path.
+  */
+static void flash_load_session_abort(void)
+{
+  app_load_enable();
+  (void)QSPI_Flash_DisableMemoryMappedMode(&hqspi);
+}
+
+/**
+  * @brief  Successful program: clear load flag and reset into mmap + jump path.
+  */
+static void flash_load_session_complete(void)
+{
+  lcd_stm32h7_message("Load OK\n");
+  HAL_Delay(300U);
+  app_load_disable();
+  (void)QSPI_Flash_EnableMemoryMappedMode(&hqspi);
+  NVIC_SystemReset();
+}
+
 void qspi_new_app_load(void)
 {
   lcd_stm32h7_clear();
@@ -226,7 +249,10 @@ void qspi_new_app_load(void)
   if (QSPI_Flash_DisableMemoryMappedMode(&hqspi) != QSPI_FLASH_OK)
   {
     (void)uart_send_string((char *)FLASH_RESP_MMAP_FAIL);
-    goto load_session_end;
+    (void)flash_uart_wait_tx_done();
+    lcd_stm32h7_message("Mmap off fail\n");
+    flash_load_session_abort();
+    return;
   }
 
   (void)uart_send_string((char *)FLASH_RESP_MMAP_OK);
@@ -235,20 +261,16 @@ void qspi_new_app_load(void)
   if (!flash_cleaning())
   {
     lcd_stm32h7_message("Erase failed\n");
-    goto load_session_end;
+    flash_load_session_abort();
+    return;
   }
 
   if (!flash_writing())
   {
     lcd_stm32h7_message("Program failed\n");
-    goto load_session_end;
+    flash_load_session_abort();
+    return;
   }
 
-  lcd_stm32h7_message("Load OK\n");
-  HAL_Delay(300U);
-
-load_session_end:
-  app_load_disable();
-  (void)QSPI_Flash_EnableMemoryMappedMode(&hqspi);
-  NVIC_SystemReset();
+  flash_load_session_complete();
 }

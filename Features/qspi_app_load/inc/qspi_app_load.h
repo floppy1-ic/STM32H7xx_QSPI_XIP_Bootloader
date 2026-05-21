@@ -26,9 +26,9 @@ extern "C" {
 
 /**
   * @brief  UART load session (host: tools/saptashri_flash.py).
-  *         true -> EC -> WE -> S+4-byte size -> K -> chunks (Y/N) -> reset.
+  *         On success: resets with load flag 0. On failure: returns with flag 1.
   * @param  None
-  * @retval None (always resets; does not return)
+  * @retval None (resets after successful program; returns to idle on failure)
   */
 void qspi_new_app_load(void);
 

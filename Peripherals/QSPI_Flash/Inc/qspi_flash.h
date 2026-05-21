@@ -73,8 +73,9 @@ extern "C" {
 #define W25Q64_SR2_QE                  0x02U   /* Quad Enable             */
 
 /* Dummy cycles for Fast Read commands -------------------------------------- */
-#define W25Q64_DUMMY_CYCLES_FAST_READ      8U   /* 0x0B Fast Read (1-1-1)  */
-#define W25Q64_DUMMY_CYCLES_READ_QUAD_IO   6U   /* 0xEB Quad I/O Fast Read */
+#define W25Q64_DUMMY_CYCLES_FAST_READ      8U   /* 0x0B — unchanged */
+#define W25Q64_MMAP_CONTINUOUS_READ_ALT    0xEFU
+#define W25Q64_DUMMY_CYCLES_READ_QUAD_IO   4U   /* 0xEB mmap: WeAct 6-2 */
 
 typedef enum
 {

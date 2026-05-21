@@ -521,7 +521,7 @@ QSPI_Flash_StatusTypeDef QSPI_Flash_EnableMemoryMappedMode(QSPI_HandleTypeDef *h
   cmd.AddressSize       = QSPI_ADDRESS_24_BITS;
   cmd.AlternateByteMode = QSPI_ALTERNATE_BYTES_4_LINES;
   cmd.AlternateBytesSize = QSPI_ALTERNATE_BYTES_8_BITS;
-  cmd.AlternateBytes    = 0x00U;
+  cmd.AlternateBytes    = W25Q64_MMAP_CONTINUOUS_READ_ALT;
   cmd.DataMode          = QSPI_DATA_4_LINES;
   cmd.DummyCycles       = W25Q64_DUMMY_CYCLES_READ_QUAD_IO;
   cmd.DdrMode           = QSPI_DDR_MODE_DISABLE;
