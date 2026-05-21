@@ -36,6 +36,24 @@ static void App_Load_PrepareHw(void)
 }
 
 /**
+  * @brief  If Backup SRAM flag is not 0 or 1, set it to 0 (run-app path).
+  * @param  None
+  * @retval None
+  */
+void app_load_flag_sanitize(void)
+{
+  uint32_t flag;
+
+  App_Load_PrepareHw();
+  flag = *App_Load_FlagPtr();
+
+  if ((flag != 0U) && (flag != 1U))
+  {
+    app_load_disable();
+  }
+}
+
+/**
   * @brief  Set write_bin flag to 1 — bootloader runs QSPI program path.
   * @param  None
   * @retval None
