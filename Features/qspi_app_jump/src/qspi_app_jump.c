@@ -111,6 +111,7 @@ bool qspi_app_is_valid_at_flash(QSPI_HandleTypeDef *hqspi, uint32_t flashByteOff
  */
  qspi_app_status_t qspi_app_jump_to_application(uint32_t appBaseAddress)
  {
+	 lcd_stm32h7_breathout();
    const uint32_t *vectors = (const uint32_t *)appBaseAddress;
    uint32_t initialSp;
    uint32_t resetHandler;
