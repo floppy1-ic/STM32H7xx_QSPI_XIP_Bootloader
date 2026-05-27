@@ -4,11 +4,11 @@ Saptashri Secure XIP Bootloader — UART host flash tool.
 
 Protocol (must match qspi_app_load.c):
   1. Host: SP (repeat)           MCU: true\\r\\n or false\\r\\n
-  2. MCU: erase 100 KB @ 0x0     Host: wait EC\\r\\n
+  2. MCU: erase 8 MB @ 0x0       Host: wait EC\\r\\n
   3. MCU: WE\\r\\n                Host: wait WE
   4. Host: S + 4-byte LE size    MCU: K (ok) or N
   5. Host: chunks (<=256 B)      MCU: Y or N per chunk
-  6. MCU: mmap on + reset
+  6. Success: MCU mmap on + reset. Failure: MCU stays in bootloader (no reset); host sees N or EC timeout
 
 Examples:
   python tools/saptashri_flash.py
@@ -44,12 +44,13 @@ RESP_WRITE_ENABLE = b"WE"
 ACK = ord("Y")
 NACK = ord("N")
 CHUNK_SIZE = 256
-FLASH_CLEAN_SIZE_BYTES = 100 * 1024
+# 8 MiB — must match firmware FLASH_CLEAN_SIZE_BYTES (W25Q64_FLASH_SIZE)
+FLASH_CLEAN_SIZE_BYTES = QSPI_FLASH_SIZE
 
 DEFAULT_BAUD = 115200
 DEFAULT_TIMEOUT = 5.0
 ACK_TIMEOUT = 120.0
-ERASE_COMPLETE_TIMEOUT_S = 120.0
+ERASE_COMPLETE_TIMEOUT_S = 300.0
 WRITE_ENABLE_TIMEOUT_S = 30.0
 SIZE_ACK_TIMEOUT_S = 30.0
 POST_WE_DELAY_S = 0.08
