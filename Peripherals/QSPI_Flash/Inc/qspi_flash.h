@@ -74,8 +74,8 @@ extern "C" {
 
 /* Dummy cycles for Fast Read commands -------------------------------------- */
 #define W25Q64_DUMMY_CYCLES_FAST_READ      8U   /* 0x0B — unchanged */
-#define W25Q64_MMAP_CONTINUOUS_READ_ALT    0xEFU
-#define W25Q64_DUMMY_CYCLES_READ_QUAD_IO   4U   /* 0xEB mmap: WeAct 6-2 */
+#define W25Q64_MMAP_CONTINUOUS_READ_ALT    0xFFU   /* H750_BootFromExtFlash CSP_QSPI */
+#define W25Q64_DUMMY_CYCLES_READ_QUAD_IO   4U      /* 0xEB mmap */
 
 typedef enum
 {

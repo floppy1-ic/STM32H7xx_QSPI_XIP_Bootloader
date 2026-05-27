@@ -11,6 +11,8 @@
 
 #include "qspi_app_jump.h"
 #include "qspi_flash.h"
+#include "lcd_mcal.h"
+#include "main.h"
 #include "stm32h7xx_hal.h"
 #include <string.h>
 
@@ -22,6 +24,10 @@
 #define QSPI_APP_JUMP_THUMB_BIT_MASK   (1UL)
 
 typedef void (*QSPI_App_Jump_ResetHandlerTypeDef)(void);
+
+extern SPI_HandleTypeDef hspi4;
+extern TIM_HandleTypeDef htim1;
+extern UART_HandleTypeDef huart1;
 
 static bool QSPI_App_Jump_IsThumbAddress(uint32_t address)
 {
@@ -98,55 +104,74 @@ bool qspi_app_is_valid_at_flash(QSPI_HandleTypeDef *hqspi, uint32_t flashByteOff
   return QSPI_App_Jump_ValidateVectors(initialSp, resetHandler);
 }
 
-qspi_app_status_t qspi_app_jump_to_application(uint32_t appBaseAddress)
-{
-  const uint32_t *vectors = (const uint32_t *)appBaseAddress;
-  uint32_t initialSp;
-  uint32_t resetHandler;
-  QSPI_App_Jump_ResetHandlerTypeDef appReset;
-
-  /* Reject jump if the vector table at appBaseAddress does not look like a valid app. */
-  if (!qspi_app_is_valid(appBaseAddress))
-  {
-    return QSPI_APP_JUMP_INVALID_VECTOR;
-  }
-
-  /* Read initial stack pointer and reset handler from the application vector table. */
-  initialSp = vectors[QSPI_APP_JUMP_VECTOR_SP_OFFSET / sizeof(uint32_t)];
-  resetHandler = vectors[QSPI_APP_JUMP_VECTOR_PC_OFFSET / sizeof(uint32_t)];
-  appReset = (QSPI_App_Jump_ResetHandlerTypeDef)resetHandler;
-
-  /* Stop all interrupts before changing core state for the handoff. */
-  __disable_irq();
-
-  /* Stop and clear SysTick so the app does not inherit bootloader tick timing. */
-  SysTick->CTRL = 0U;
-  SysTick->LOAD = 0U;
-  SysTick->VAL  = 0U;
-  NVIC_ClearPendingIRQ(SysTick_IRQn);
-
-  /* Disable every NVIC line and clear pending IRQs left by bootloader drivers. */
-  SCB->ICSR |= SCB_ICSR_PENDSVCLR_Msk;
-  for (uint32_t i = 0U; i < 8U; i++)
-  {
-    NVIC->ICER[i] = 0xFFFFFFFFUL;
-    NVIC->ICPR[i] = 0xFFFFFFFFUL;
-  }
-  SCB->ICSR |= (SCB_ICSR_PENDSVCLR_Msk | SCB_ICSR_PENDSTCLR_Msk);
-
-  /* Point the core at the app vector table and load the application stack pointer. */
-  SCB->VTOR = appBaseAddress;
-  __set_MSP(initialSp);
-
-  /* VTOR/MSP visible before handoff; leave IRQs masked (PRIMASK=1 from __disable_irq). */
-  __DSB();
-  __ISB();
-
-  /* Transfer control to the application Reset_Handler (does not return).
-   * Do not __enable_irq() here: an IRQ before app init would use the new VTOR
-   * while handlers/peripherals are not ready. The app enables IRQs after init. */
-  appReset();
-
-  /* Not reached */
-  return QSPI_APP_JUMP_ERROR;
-}
+/**
+ * @brief Jump from bootloader to QSPI XIP application at appBaseAddress.
+ * @param appBaseAddress Application vector table base (e.g. 0x90000000).
+ * @retval QSPI_APP_JUMP_* status (does not return on success).
+ */
+ qspi_app_status_t qspi_app_jump_to_application(uint32_t appBaseAddress)
+ {
+   const uint32_t *vectors = (const uint32_t *)appBaseAddress;
+   uint32_t initialSp;
+   uint32_t resetHandler;
+   QSPI_App_Jump_ResetHandlerTypeDef appReset;
+ 
+   /* --- 1) Validate application vector table ------------------------------ */
+   if (!qspi_app_is_valid(appBaseAddress))
+   {
+     return QSPI_APP_JUMP_INVALID_VECTOR;
+   }
+ 
+   initialSp = vectors[QSPI_APP_JUMP_VECTOR_SP_OFFSET / sizeof(uint32_t)];
+   resetHandler = vectors[QSPI_APP_JUMP_VECTOR_PC_OFFSET / sizeof(uint32_t)];
+ 
+   /* Cortex-M reset vector must be Thumb (LSB = 1). */
+   if ((resetHandler & 0x1U) == 0U)
+   {
+     return QSPI_APP_JUMP_INVALID_VECTOR;
+   }
+ 
+   appReset = (QSPI_App_Jump_ResetHandlerTypeDef)resetHandler;
+ 
+   /* --- 2) Stop interrupts during handoff --------------------------------- */
+   /* Mask all IRQs until app re-enables them after HAL_Init(). */
+   __disable_irq();
+ 
+   /* --- 3) Stop bootloader SysTick (app will restart via HAL_InitTick) ---- */
+   SysTick->CTRL = 0U;
+   SysTick->LOAD = 0U;
+   SysTick->VAL  = 0U;
+   NVIC_ClearPendingIRQ(SysTick_IRQn);
+ 
+   /* --- 4) Clear NVIC pending / disable external IRQ lines ---------------- */
+   /* SysTick on Cortex-M is controlled by SysTick->CTRL, not NVIC->ISER.   */
+   /* App HAL will re-enable UART/SPI/etc. IRQs as needed.                  */
+   SCB->ICSR |= (SCB_ICSR_PENDSVCLR_Msk | SCB_ICSR_PENDSTCLR_Msk);
+   for (uint32_t i = 0U; i < 8U; i++)
+   {
+     NVIC->ICER[i] = 0xFFFFFFFFUL;  /* disable */
+     NVIC->ICPR[i] = 0xFFFFFFFFUL;  /* clear pending */
+   }
+ 
+   /* --- 5) Deinit bootloader-owned peripherals only --------------------- */
+   /* Do NOT deinit QSPI / do NOT reset RCC — XIP fetch must stay alive.    */
+   (void)HAL_UART_DeInit(&huart1);
+   (void)HAL_SPI_DeInit(&hspi4);
+   (void)HAL_TIM_Base_DeInit(&htim1);
+   HAL_GPIO_DeInit(GPIOE, GPIO_PIN_3 | LCD_CS_Pin | LCD_WR_RS_Pin);
+ 
+   /* --- 6) Point core at application vector table ----------------------- */
+   SCB->VTOR = appBaseAddress;
+   __set_MSP(initialSp);
+ 
+   __DSB();
+   __ISB();
+ 
+   /* --- 7) Jump to application Reset_Handler ---------------------------- */
+   /* Reset_Handler will: set SP, SystemInit, copy .data, zero .bss, main(). */
+   /* PRIMASK stays 1 here — app should call __enable_irq() after HAL_Init(). */
+   appReset();
+ 
+   /* Not reached */
+   return QSPI_APP_JUMP_ERROR;
+ }
