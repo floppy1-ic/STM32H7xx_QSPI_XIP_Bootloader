@@ -3,11 +3,11 @@
 Saptashri Secure XIP Bootloader — UART host flash tool.
 
 Protocol (must match qspi_app_load.c):
-  1. Host: SP (repeat)           MCU: true\\r\\n or false\\r\\n
-  2. MCU: erase 8 MB @ 0x0       Host: wait EC\\r\\n
-  3. MCU: WE\\r\\n                Host: wait WE
-  4. Host: S + 4-byte LE size    MCU: K (ok) or N
-  5. Host: chunks (<=256 B)      MCU: Y or N per chunk
+  1. Host: P (repeat)            MCU: true\\r\\n or false\\r\\n
+  2. Host: S + 4-byte LE size      MCU: K (ok) or N
+  3. MCU: erase ceil(size/4K)+1 sectors  Host: wait EC\\r\\n
+  4. MCU: WE\\r\\n                 Host: wait WE
+  5. Host: chunks (<=256 B)       MCU: Y or N per chunk
   6. Success: MCU mmap on + reset. Failure: MCU stays in bootloader (no reset); host sees N or EC timeout
 
 Examples:
@@ -36,7 +36,7 @@ QSPI_FLASH_BASE = 0x0000_0000
 QSPI_FLASH_SIZE = 8 * 1024 * 1024
 QSPI_XIP_BASE = 0x9000_0000
 
-LOAD_TRIGGER = b"SP"
+LOAD_TRIGGER = b"P"
 RESP_TRUE = b"true"
 RESP_FALSE = b"false"
 RESP_ERASE_COMPLETE = b"EC"
@@ -44,13 +44,13 @@ RESP_WRITE_ENABLE = b"WE"
 ACK = ord("Y")
 NACK = ord("N")
 CHUNK_SIZE = 256
-# 8 MiB — must match firmware FLASH_CLEAN_SIZE_BYTES (W25Q64_FLASH_SIZE)
-FLASH_CLEAN_SIZE_BYTES = QSPI_FLASH_SIZE
+W25Q64_SECTOR_SIZE = 4 * 1024
+FLASH_ERASE_EXTRA_SECTORS = 1
 
 DEFAULT_BAUD = 115200
 DEFAULT_TIMEOUT = 5.0
 ACK_TIMEOUT = 120.0
-ERASE_COMPLETE_TIMEOUT_S = 300.0
+ERASE_COMPLETE_TIMEOUT_S = 120.0
 WRITE_ENABLE_TIMEOUT_S = 30.0
 SIZE_ACK_TIMEOUT_S = 30.0
 POST_WE_DELAY_S = 0.08
@@ -59,12 +59,18 @@ SYNC_SIZE = b"S"
 ACK_SIZE_OK = ord("K")
 
 SP_TRIGGER_INTERVAL_S = 0.05
-SP_TRIGGER_DURATION_S = 8.0
+SP_TRIGGER_DURATION_S = 10.0
 SP_RESPONSE_POLL_S = 0.1
 POST_READY_DELAY_S = 0.5
 TOKEN_POLL_S = 0.1
 
 PROGRESS_BAR_WIDTH = 50
+
+
+def sectors_to_erase(image_size: int) -> int:
+    """4 KB sectors covering image plus one extra margin sector (matches firmware)."""
+    sectors_for_image = (image_size + W25Q64_SECTOR_SIZE - 1) // W25Q64_SECTOR_SIZE
+    return sectors_for_image + FLASH_ERASE_EXTRA_SECTORS
 
 
 # --- Terminal UI (ANSI); flash protocol unchanged ---------------------------------
@@ -373,7 +379,7 @@ class SaptashriUartFlasher:
 
         if progress:
             _print_info(
-                f"Sending SP every {int(SP_TRIGGER_INTERVAL_S * 1000)} ms "
+                f"Sending P every {int(SP_TRIGGER_INTERVAL_S * 1000)} ms "
                 f"(up to {SP_TRIGGER_DURATION_S:.0f} s) until true/false..."
             )
 
@@ -399,7 +405,7 @@ class SaptashriUartFlasher:
                     if progress:
                         _print_done(
                             f"Bootloader ready "
-                            f"{_paint('(true)', _Ansi.GREEN)} after {attempt} SP(s)."
+                            f"{_paint('(true)', _Ansi.GREEN)} after {attempt} P(s)."
                         )
                     time.sleep(POST_READY_DELAY_S)
                     self._rx_pending.clear()
@@ -463,33 +469,26 @@ class SaptashriUartFlasher:
     def program(self, image: bytes, *, progress: bool = True) -> None:
         if len(image) > QSPI_FLASH_SIZE:
             raise FlashToolError(f"Image {len(image)} B > W25Q64 size")
-        if len(image) > FLASH_CLEAN_SIZE_BYTES:
+        if len(image) == 0:
+            raise FlashToolError("Empty image")
+
+        n_sectors = sectors_to_erase(len(image))
+        erase_bytes = n_sectors * W25Q64_SECTOR_SIZE
+        if erase_bytes > QSPI_FLASH_SIZE:
             raise FlashToolError(
-                f"Image {len(image)} B > {FLASH_CLEAN_SIZE_BYTES} B erase window "
-                "(increase FLASH_CLEAN_SIZE_BYTES in firmware and tool)"
+                f"Erase window {erase_bytes} B exceeds W25Q64 ({QSPI_FLASH_SIZE} B)"
             )
+
         if progress:
             _print_info(
                 f"Image: {len(image)} bytes @ QSPI {_addr(QSPI_FLASH_BASE)}"
             )
+            _print_info(
+                f"Erase: {n_sectors} x 4 KB sectors "
+                f"({_paint(f'{erase_bytes} B', _Ansi.DIM)}, +1 margin)"
+            )
 
         self._send_sp_until_ready(progress=progress)
-
-        self._wait_for_token(
-            RESP_ERASE_COMPLETE,
-            ERASE_COMPLETE_TIMEOUT_S,
-            progress=progress,
-            label="EC (erase complete)",
-        )
-        self._wait_for_token(
-            RESP_WRITE_ENABLE,
-            WRITE_ENABLE_TIMEOUT_S,
-            progress=progress,
-            label="WE (write enable)",
-        )
-
-        self._rx_pending.clear()
-        time.sleep(POST_WE_DELAY_S)
 
         size_payload = SYNC_SIZE + struct.pack("<I", len(image))
         self.ser.write(size_payload)
@@ -504,13 +503,37 @@ class SaptashriUartFlasher:
         if progress:
             _print_done("Size accepted (K)")
 
-        time.sleep(POST_SIZE_DELAY_S)
+        if progress:
+            _print_info(f"Erasing {n_sectors} sector(s)...")
+
+        t_erase = time.monotonic()
+        self._wait_for_token(
+            RESP_ERASE_COMPLETE,
+            ERASE_COMPLETE_TIMEOUT_S,
+            progress=progress,
+            label="EC (erase complete)",
+        )
+        if progress:
+            erase_elapsed = time.monotonic() - t_erase
+            _print_done(
+                f"Erase complete in {_paint(f'{erase_elapsed:.1f}s', _Ansi.CYAN)}"
+            )
+
+        self._wait_for_token(
+            RESP_WRITE_ENABLE,
+            WRITE_ENABLE_TIMEOUT_S,
+            progress=progress,
+            label="WE (write enable)",
+        )
+
+        self._rx_pending.clear()
+        time.sleep(POST_WE_DELAY_S)
 
         if progress:
             _print_info(f"Flashing in up to {CHUNK_SIZE}-byte chunks...")
 
         sent = 0
-        t0 = time.monotonic()
+        t_flash = time.monotonic()
         total = len(image)
         while sent < total:
             chunk = image[sent : sent + CHUNK_SIZE]
@@ -519,12 +542,12 @@ class SaptashriUartFlasher:
             self._read_ack(f"chunk @ {sent}")
             sent += len(chunk)
             if progress:
-                _write_progress_line(sent, total, t0)
+                _write_progress_line(sent, total, t_flash)
         if progress:
-            elapsed = time.monotonic() - t0
+            flash_elapsed = time.monotonic() - t_flash
             print()
             _print_done(
-                f"Transfer complete in {_paint(f'{elapsed:.1f}s', _Ansi.CYAN)} — "
+                f"Flash complete in {_paint(f'{flash_elapsed:.1f}s', _Ansi.CYAN)} — "
                 f"MCU resets → app @ {_addr(QSPI_XIP_BASE)}"
             )
 
