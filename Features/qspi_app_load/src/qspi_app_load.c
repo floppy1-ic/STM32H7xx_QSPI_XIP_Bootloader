@@ -5,12 +5,12 @@
   * @brief   Load application binary into external QSPI flash (UART host protocol).
   *
   * Protocol (must match tools/saptashri_flash.py):
-  *   1. Host: SP (repeat)     MCU: true\r\n | false\r\n
-  *   2. MCU: erase 8 MB (64 KB blocks)  Host: wait EC\r\n (timeout ~300 s)
-  *   3. MCU: WE\r\n           Host: wait WE
-  *   4. Host: 'S' + 4-byte LE size   MCU: 'K' | 'N'
-  *   5. Host: data chunks     MCU: Y | N per chunk
-  *   6. Success: flag 0, mmap on, reset. Failure: flag 1, mmap on, return to BL idle.
+  *   1. Host: P (repeat)           MCU: true\r\n | false\r\n
+  *   2. Host: S + 4-byte LE size   MCU: K (ok) or N
+  *   3. MCU: erase ceil(size/4K)+1 sectors @ 0x0  Host: wait EC\r\n
+  *   4. MCU: WE\r\n                Host: wait WE
+  *   5. Host: chunks (<=256 B)     MCU: Y or N per chunk
+  *   6. Success: flag 0, mmap on, reset. Failure: flag 1, return to BL idle.
   *
   * @copyright
   * Copyright (c) 2026 Sibun. All rights reserved.
@@ -28,11 +28,11 @@ extern QSPI_HandleTypeDef hqspi;
 extern UART_HandleTypeDef huart1;
 
 #define FLASH_WRITE_CHUNK_BYTES       (256U)
-/* Full W25Q64 (8 MiB) erase window before program */
-#define FLASH_CLEAN_SIZE_BYTES        W25Q64_FLASH_SIZE
+#define FLASH_MAX_IMAGE_BYTES         W25Q64_FLASH_SIZE
 #define FLASH_UART_FIRST_BYTE_MS      (30000U)
 #define FLASH_UART_NEXT_BYTE_MS       (100U)
 #define FLASH_POST_WE_DELAY_MS        (20U)
+#define FLASH_ERASE_EXTRA_SECTORS     (1U)
 
 #define FLASH_RESP_MMAP_OK            "true\r\n"
 #define FLASH_RESP_MMAP_FAIL          "false\r\n"
@@ -131,7 +131,7 @@ static bool flash_receive_image_size(uint32_t *image_size)
                 | ((uint32_t)size_buf[2] << 16)
                 | ((uint32_t)size_buf[3] << 24);
 
-  if ((*image_size == 0U) || (*image_size > FLASH_CLEAN_SIZE_BYTES))
+  if ((*image_size == 0U) || (*image_size > FLASH_MAX_IMAGE_BYTES))
   {
     return false;
   }
@@ -139,17 +139,34 @@ static bool flash_receive_image_size(uint32_t *image_size)
   return true;
 }
 
-static bool flash_cleaning(void)
+/**
+  * @brief  4 KB sectors to erase: cover image + one extra sector margin.
+  */
+static uint32_t flash_sectors_to_erase(uint32_t image_size)
 {
+  uint32_t sectors_for_image =
+      (image_size + W25Q64_SECTOR_SIZE - 1U) / W25Q64_SECTOR_SIZE;
+
+  return sectors_for_image + FLASH_ERASE_EXTRA_SECTORS;
+}
+
+static bool flash_cleaning(uint32_t image_size)
+{
+  uint32_t sector_count = flash_sectors_to_erase(image_size);
+  uint32_t erase_bytes = sector_count * W25Q64_SECTOR_SIZE;
   uint32_t offset;
+  uint32_t base = QSPI_APP_LOAD_FLASH_BASE;
 
-  lcd_stm32h7_message("Erasing 8 MB...\n");
-
-  for (offset = QSPI_APP_LOAD_FLASH_BASE;
-       offset < (QSPI_APP_LOAD_FLASH_BASE + FLASH_CLEAN_SIZE_BYTES);
-       offset += W25Q64_BLOCK_64K_SIZE)
+  if (erase_bytes > W25Q64_FLASH_SIZE)
   {
-    if (QSPI_Flash_EraseBlock64K(&hqspi, offset) != QSPI_FLASH_OK)
+    return false;
+  }
+
+  lcd_stm32h7_message("Erasing app...\n");
+
+  for (offset = 0U; offset < erase_bytes; offset += W25Q64_SECTOR_SIZE)
+  {
+    if (QSPI_Flash_EraseSector(&hqspi, base + offset) != QSPI_FLASH_OK)
     {
       (void)flash_uart_send_ack(FLASH_NACK);
       return false;
@@ -162,11 +179,10 @@ static bool flash_cleaning(void)
   return true;
 }
 
-static bool flash_writing(void)
+static bool flash_writing(uint32_t image_size)
 {
   uint8_t chunk[FLASH_WRITE_CHUNK_BYTES];
   uint32_t flash_off = QSPI_APP_LOAD_FLASH_BASE;
-  uint32_t image_size = 0U;
   uint32_t remaining;
   uint32_t chunk_len;
 
@@ -177,17 +193,6 @@ static bool flash_writing(void)
   }
 
   HAL_Delay(FLASH_POST_WE_DELAY_MS);
-
-  if (!flash_receive_image_size(&image_size))
-  {
-    (void)flash_uart_send_ack(FLASH_NACK);
-    return false;
-  }
-
-  if (!flash_uart_send_ack(FLASH_ACK_SIZE_OK))
-  {
-    return false;
-  }
 
   lcd_stm32h7_message("UART program...\n");
 
@@ -242,6 +247,8 @@ static void flash_load_session_complete(void)
 
 void qspi_new_app_load(void)
 {
+  uint32_t image_size = 0U;
+
   lcd_stm32h7_clear();
   lcd_stm32h7_color(BLK, BLE);
   lcd_stm32h7_message("App load : Wait...\n");
@@ -258,14 +265,28 @@ void qspi_new_app_load(void)
   (void)uart_send_string((char *)FLASH_RESP_MMAP_OK);
   (void)flash_uart_wait_tx_done();
 
-  if (!flash_cleaning())
+  if (!flash_receive_image_size(&image_size))
+  {
+    (void)flash_uart_send_ack(FLASH_NACK);
+    lcd_stm32h7_message("Bad size\n");
+    flash_load_session_abort();
+    return;
+  }
+
+  if (!flash_uart_send_ack(FLASH_ACK_SIZE_OK))
+  {
+    flash_load_session_abort();
+    return;
+  }
+
+  if (!flash_cleaning(image_size))
   {
     lcd_stm32h7_message("Erase failed\n");
     flash_load_session_abort();
     return;
   }
 
-  if (!flash_writing())
+  if (!flash_writing(image_size))
   {
     lcd_stm32h7_message("Program failed\n");
     flash_load_session_abort();
