@@ -1,3 +1,4 @@
+"./App_Feature/main_lcd_message/src/main_lcd_message.o"
 "./Core/Src/main.o"
 "./Core/Src/stm32h7xx_hal_msp.o"
 "./Core/Src/stm32h7xx_it.o"

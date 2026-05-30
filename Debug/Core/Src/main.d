@@ -36,6 +36,7 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h \
  ../Peripherals/SPI4_LCD/Inc/lcd_mcal.h \
+ ../App_Feature/main_lcd_message/inc/main_lcd_message.h \
  ../Features/app_shared_ram/inc/app_shared_ram.h \
  ../Features/qspi_app_load/inc/qspi_app_load.h \
  ../Features/qspi_app_jump/inc/qspi_app_jump.h \
@@ -79,6 +80,7 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h:
 ../Peripherals/SPI4_LCD/Inc/lcd_mcal.h:
+../App_Feature/main_lcd_message/inc/main_lcd_message.h:
 ../Features/app_shared_ram/inc/app_shared_ram.h:
 ../Features/qspi_app_load/inc/qspi_app_load.h:
 ../Features/qspi_app_jump/inc/qspi_app_jump.h:

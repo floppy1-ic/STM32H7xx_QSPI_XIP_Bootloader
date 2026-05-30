@@ -1,7 +1,7 @@
 ../Drivers/CMSIS/Include/core_cm7.h:1993:22:__NVIC_ClearPendingIRQ	16	static
-../Features/qspi_app_jump/src/qspi_app_jump.c:26:13:QSPI_App_Jump_IsThumbAddress	16	static
-../Features/qspi_app_jump/src/qspi_app_jump.c:31:13:QSPI_App_Jump_IsStackPointerValid	16	static
-../Features/qspi_app_jump/src/qspi_app_jump.c:47:13:QSPI_App_Jump_ValidateVectors	16	static
-../Features/qspi_app_jump/src/qspi_app_jump.c:62:6:qspi_app_is_valid	32	static
-../Features/qspi_app_jump/src/qspi_app_jump.c:79:6:qspi_app_is_valid_at_flash	32	static
-../Features/qspi_app_jump/src/qspi_app_jump.c:101:19:qspi_app_jump_to_application	40	static,ignoring_inline_asm
+../Features/qspi_app_jump/src/qspi_app_jump.c:32:13:QSPI_App_Jump_IsThumbAddress	16	static
+../Features/qspi_app_jump/src/qspi_app_jump.c:37:13:QSPI_App_Jump_IsStackPointerValid	16	static
+../Features/qspi_app_jump/src/qspi_app_jump.c:53:13:QSPI_App_Jump_ValidateVectors	16	static
+../Features/qspi_app_jump/src/qspi_app_jump.c:68:6:qspi_app_is_valid	32	static
+../Features/qspi_app_jump/src/qspi_app_jump.c:85:6:qspi_app_is_valid_at_flash	32	static
+../Features/qspi_app_jump/src/qspi_app_jump.c:112:20:qspi_app_jump_to_application	40	static,ignoring_inline_asm

@@ -1,6 +1,7 @@
-Features/qspi_app_jump/src/qspi_app_jump.o: \
- ../Features/qspi_app_jump/src/qspi_app_jump.c \
- ../Features/qspi_app_jump/inc/qspi_app_jump.h \
+App_Feature/main_lcd_message/src/main_lcd_message.o: \
+ ../App_Feature/main_lcd_message/src/main_lcd_message.c \
+ ../App_Feature/main_lcd_message/inc/main_lcd_message.h \
+ ../Peripherals/SPI4_LCD/Inc/lcd_mcal.h ../Core/Inc/main.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h \
  ../Core/Inc/stm32h7xx_hal_conf.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc.h \
@@ -36,10 +37,10 @@ Features/qspi_app_jump/src/qspi_app_jump.o: \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h \
- ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h \
- ../Peripherals/QSPI_Flash/Inc/qspi_flash.h \
- ../Peripherals/SPI4_LCD/Inc/lcd_mcal.h ../Core/Inc/main.h
-../Features/qspi_app_jump/inc/qspi_app_jump.h:
+ ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
+../App_Feature/main_lcd_message/inc/main_lcd_message.h:
+../Peripherals/SPI4_LCD/Inc/lcd_mcal.h:
+../Core/Inc/main.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h:
 ../Core/Inc/stm32h7xx_hal_conf.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc.h:
@@ -76,6 +77,3 @@ Features/qspi_app_jump/src/qspi_app_jump.o: \
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h:
-../Peripherals/QSPI_Flash/Inc/qspi_flash.h:
-../Peripherals/SPI4_LCD/Inc/lcd_mcal.h:
-../Core/Inc/main.h:
