@@ -1,8 +1,0 @@
-../Features/app_shared_ram/src/app_shared_ram.c:16:27:App_Load_FlagPtr	1
-../Features/app_shared_ram/src/app_shared_ram.c:24:13:App_Load_PrepareHw	2
-../Features/app_shared_ram/src/app_shared_ram.c:43:6:app_load_flag_sanitize	3
-../Features/app_shared_ram/src/app_shared_ram.c:61:6:app_load_enable	1
-../Features/app_shared_ram/src/app_shared_ram.c:73:6:app_load_disable	1
-../Features/app_shared_ram/src/app_shared_ram.c:85:17:App_Load_ReadFlag	1
-../Features/app_shared_ram/src/app_shared_ram.c:96:6:app_load_is_enabled	1
-../Features/app_shared_ram/src/app_shared_ram.c:106:6:app_load_is_disabled	1

@@ -1,5 +1,0 @@
-../Peripherals/UART1/Src/uart_mcal.c:13:26:uart_recv_byte	16	static
-../Peripherals/UART1/Src/uart_mcal.c:18:19:uart_send_char	16	static
-../Peripherals/UART1/Src/uart_mcal.c:23:19:uart_send_string	24	static
-../Peripherals/UART1/Src/uart_mcal.c:46:19:uart_recv_char	16	static
-../Peripherals/UART1/Src/uart_mcal.c:56:10:uart_recv_string	24	static
