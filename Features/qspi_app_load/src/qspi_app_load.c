@@ -31,6 +31,7 @@ extern UART_HandleTypeDef huart1;
 #define FLASH_MAX_IMAGE_BYTES         W25Q64_FLASH_SIZE
 #define FLASH_UART_FIRST_BYTE_MS      (30000U)
 #define FLASH_UART_NEXT_BYTE_MS       (100U)
+#define FLASH_UART_DRAIN_GAP_MS       (5U)
 #define FLASH_POST_WE_DELAY_MS        (20U)
 #define FLASH_ERASE_EXTRA_SECTORS     (1U)
 
@@ -88,6 +89,20 @@ static bool flash_uart_recv_byte(uint8_t *byte, uint32_t timeout_ms)
   return (HAL_UART_Receive(&huart1, byte, 1U, timeout_ms) == HAL_OK);
 }
 
+/**
+  * @brief  Discard buffered/in-flight bytes (e.g. surplus 'P' triggers) so the
+  *         size handshake starts clean. Exits after one idle gap with no byte.
+  */
+static void flash_uart_drain_rx(void)
+{
+  uint8_t junk;
+
+  while (flash_uart_recv_byte(&junk, FLASH_UART_DRAIN_GAP_MS))
+  {
+    /* discard */
+  }
+}
+
 static bool flash_uart_recv_exact(uint8_t *buf, uint32_t len)
 {
   uint32_t i;
@@ -108,12 +123,23 @@ static bool flash_uart_recv_exact(uint8_t *buf, uint32_t len)
 
 static bool flash_receive_image_size(uint32_t *image_size)
 {
-  uint8_t sync;
+  uint8_t sync = 0U;
   uint8_t size_buf[4];
+  uint32_t deadline = HAL_GetTick() + FLASH_UART_FIRST_BYTE_MS;
 
-  if (!flash_uart_recv_byte(&sync, FLASH_UART_FIRST_BYTE_MS))
+  /* Skip leftover trigger bytes ('P') and line endings until the 'S' sync.
+     The host streams 'P' until 'true', so surplus 'P' may sit in the RX FIFO. */
+  while (HAL_GetTick() < deadline)
   {
-    return false;
+    if (!flash_uart_recv_byte(&sync, FLASH_UART_NEXT_BYTE_MS))
+    {
+      continue;
+    }
+
+    if (sync == (uint8_t)FLASH_SYNC_SIZE)
+    {
+      break;
+    }
   }
 
   if (sync != (uint8_t)FLASH_SYNC_SIZE)
@@ -181,6 +207,7 @@ static bool flash_cleaning(uint32_t image_size)
 
 static bool flash_writing(uint32_t image_size)
 {
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3,0);
   uint8_t chunk[FLASH_WRITE_CHUNK_BYTES];
   uint32_t flash_off = QSPI_APP_LOAD_FLASH_BASE;
   uint32_t remaining;
@@ -250,6 +277,7 @@ void qspi_new_app_load(void)
   uint32_t image_size = 0U;
 
   lcd_stm32h7_clear();
+  lcd_stm32h7_backlight(100);
   lcd_stm32h7_color(BLK, BLE);
   lcd_stm32h7_message("App load : Wait...\n");
 
@@ -264,6 +292,9 @@ void qspi_new_app_load(void)
 
   (void)uart_send_string((char *)FLASH_RESP_MMAP_OK);
   (void)flash_uart_wait_tx_done();
+
+  /* Drop surplus 'P' triggers buffered before/while the host saw 'true'. */
+  flash_uart_drain_rx();
 
   if (!flash_receive_image_size(&image_size))
   {
