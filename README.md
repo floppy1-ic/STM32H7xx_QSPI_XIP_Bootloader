@@ -68,16 +68,16 @@ Survives **soft reset** (`NVIC_SystemReset` / `system_reset()` in `main.c`). Cle
 5. Branch on flag:
    - **1** → `qspi_new_app_load()` (UART program; see below).
    - **0** → `qspi_app_is_valid_at_flash()` (indirect `0x0B` read @ offset 0). If invalid → LCD **`No valid app`**. If valid → mmap; on mmap fail → **`Mmap fail`**. Else cache cleanup → `qspi_app_jump_to_application(0x90000000)`; if jump returns → mmap off → idle.
-6. **`while(1)`:** PE3 heartbeat; `uart_recv_string` — if **`SP`** → `app_load_enable()` + `qspi_new_app_load()`.
+6. **`while(1)`:** PE3 heartbeat; `uart_recv_string` — if first byte is **`P`** → `app_load_enable()` + `qspi_new_app_load()`.
 
 ### `qspi_new_app_load()` (UART program)
 
-Matches `tools/saptashri_flash.py`:
+Matches `tools/saptashri_flash.py`. **Size is sent first, then erase is sized to the image** (not a full-chip erase):
 
-1. Mmap off → host sees `true\r\n` / `false\r\n`.
-2. Erase **full 8 MB** W25Q64 @ offset 0 (**128 × 64 KB** block erases) → `EC\r\n` (allow **~1–3 min**; host timeout **300 s**).
-3. `WE\r\n` → host sends **`S`** + 4-byte LE size → **`K`** / **`N`** (max image size = 8 MB).
-4. Data in **256-byte** chunks → **`Y`** / **`N`** per chunk.
+1. Mmap off → host sees `true\r\n` / `false\r\n`; surplus `P` triggers drained.
+2. Host sends **`S`** + 4-byte LE size → **`K`** / **`N`** (max image size = 8 MB).
+3. Erase **`ceil(size / 4 KB) + 1`** sectors @ offset 0 (**4 KB** sector erases, +1 margin) → `EC\r\n` (host timeout **120 s**).
+4. `WE\r\n` → host streams **≤256-byte** chunks → **`Y`** / **`N`** per chunk.
 5. **Success:** LCD **Load OK** → flag **0** → mmap on → **reset** → boot tries jump.
 6. **Failure:** flag stays **1**, **mmap off**, **return** to idle (no reset; host sees **`N`** or **EC** timeout).
 
@@ -97,7 +97,7 @@ Matches `tools/saptashri_flash.py`:
 ## Host flash tool (`tools/`)
 
 1. Bootloader running (PE3 heartbeat in idle).
-2. `python tools/saptashri_flash.py -p COM5 app.bin` sends **`SP`+size**, then **256-byte** chunks with **ACK** handshake.
+2. `python tools/saptashri_flash.py -p COM5 app.bin` streams **`P`** until ready, sends **`S`+size**, then **≤256-byte** chunks with **ACK** handshake.
 3. Image programs @ **`0x00000000`**; MCU resets with mmap → app @ **`0x90000000`**.
 
 See **[Host flash tool — detail](#host-flash-tool--saptashri_flashpy)** below.
@@ -227,12 +227,12 @@ If jump reaches **HardFault** at **`0x90000A8C`**, that is the app’s **`HardFa
 | Bootloader @ `0x08000000` (128 KB) | Done |
 | `QSPI_Flash_Init` + QE on boot | Done |
 | `app_load_flag_sanitize` | Done |
-| UART load: **8 MB** erase + program + ACK | Done |
+| UART load: size-based erase + program + ACK | Done |
 | Load fail: no reset, flag 1, mmap off | Done |
 | Validate before mmap (`qspi_app_is_valid_at_flash`) | Done |
 | Mmap XIP aligned with WeAct (`0xEF`, 4 dummies) | Done |
 | Jump when flag 0 (`qspi_app_jump_to_application`) | Done |
-| Host tool `saptashri_flash.py` (300 s erase timeout) | Done |
+| Host tool `saptashri_flash.py` (size-based erase, 120 s timeout) | Done |
 | **Application** @ `0x90000000` (separate project) | Build & debug in app project |
 | Optional: peripheral deinit before jump | Not done |
 
@@ -255,11 +255,11 @@ pip install -r tools/requirements.txt
 
 | Step | Host | Bootloader |
 |------|------|------------|
-| 1 | `SP` (repeat until ready) | Idle: `app_load_enable()` → `qspi_new_app_load()`; or boot with flag **1** |
-| 2 | Wait | Mmap off → `true\r\n` or `false\r\n` |
-| 3 | Wait | Erase full 8 MB (64 KB blocks) → `EC\r\n` (~1–3 min) |
-| 4 | Wait | `WE\r\n` |
-| 5 | **`S`** + 4-byte LE size | **`K`** / **`N`** |
+| 1 | **`P`** (repeat ≤12 s until ready) | Idle: `app_load_enable()` → `qspi_new_app_load()`; or boot with flag **1** |
+| 2 | Wait | Mmap off → `true\r\n` or `false\r\n` (surplus `P` drained) |
+| 3 | **`S`** + 4-byte LE size | **`K`** / **`N`** (size ≤ 8 MB) |
+| 4 | Wait | Erase `ceil(size / 4 KB) + 1` sectors (4 KB each) → `EC\r\n` (host timeout **120 s**) |
+| 5 | Wait | `WE\r\n` |
 | 6 | ≤256 B chunks | **`Y`** / **`N`** per chunk |
 | 7 | — | **Success:** flag 0, mmap on, **reset**. **Fail:** flag 1, stay in bootloader |
 
@@ -268,10 +268,29 @@ No ST-LINK required for application updates after the bootloader is programmed o
 ### Usage
 
 ```bash
+# Interactive: prompts for firmware path, then COM port
 python tools/saptashri_flash.py
-python tools/saptashri_flash.py -p COM5 app.bin
-python tools/saptashri_flash.py -p COM5 --info app.hex
+
+# Flash a .bin to a specific port (asks Y/n before flashing)
+python tools/saptashri_flash.py -p COMx app.bin
+
+# Flash a .hex and skip the confirmation prompt
+python tools/saptashri_flash.py -p COMx -y app.hex
+
+# Inspect image only — print size + SP/Reset vectors, no UART
+python tools/saptashri_flash.py --info app.hex
+
+# Override baud (default 115200)
+python tools/saptashri_flash.py -p COMx -b 115200 app.bin
 ```
+
+| Option | Meaning |
+|--------|---------|
+| `firmware` | Path to `.bin` or `.hex` (positional; prompts if omitted) |
+| `-p`, `--port` | COM port (e.g. `COMx`); interactive picker if omitted |
+| `-b`, `--baud` | Baud rate (default **115200**) |
+| `-y`, `--yes` | Skip the flash confirmation prompt |
+| `--info` | Show image info only (no UART access) |
 
 `.hex` linked at **`0x90000000`** is converted to offset **0** automatically.
 
@@ -281,12 +300,80 @@ python tools/saptashri_flash.py -p COM5 --info app.hex
 |--------|------|
 | `Peripherals/QSPI_Flash/` | Init, QE, erase, write, mmap on/off |
 | `Peripherals/UART1/` | `uart_mcal` — send/recv on USART1 |
-| `Core/Src/main.c` | Boot branches + idle **`SP`** trigger |
+| `Core/Src/main.c` | Boot branches + idle **`P`** trigger |
 | `Features/qspi_app_load/` | Full UART program session |
 | `Features/qspi_app_jump/` | Indirect validate + XIP jump |
 | `Features/app_shared_ram/` | BKPSRAM flag + sanitize |
 
 Internal bootloader @ `0x08000000`: flash once via CubeIDE / ST-LINK.
+
+---
+
+## XIP application integration — verified changes (Arundhati)
+
+These are the **key fixes that made the jump + app run successfully** (not stuck on “Jump to QSPI app”). They live in the **application** project (e.g. `Arundhati-ARU-CU-X`), not in this bootloader, but the bootloader handoff assumes them. Full write-up with code: companion guides **`QSPI app.html`** and **`QSPI_mpu_compare.html`**.
+
+### 8 key fixes (application side)
+
+| # | Fix | Why |
+|---|-----|-----|
+| 1 | **Linker FLASH @ `0x90000000`** (≤ 8 MB) | App code + vector table must live in the QSPI XIP window |
+| 2 | **No QUADSPI re-init in app** — `MX_QUADSPI_Init()` commented out (and stubbed to `return;`) | Calling `HAL_QSPI_Init()` breaks the bootloader’s mmap → HardFault |
+| 3 | **`SystemInit` does not reset RCC or enable cache** | Bootloader PLL/QSPI mmap stay valid; cache is enabled later, after MPU |
+| 4 | **MPU before cache** — 2-region MPU (8 MB no-exec + 1 MB exec) | Wrong order HardFaults right after `MPU_Config()` |
+| 5 | **Clock handoff, not full `SystemClock_Config()`** — only `SystemCoreClockUpdate()` + `HAL_InitTick()` | Re-running HSE/PLL leaves the LCD on the bootloader message |
+| 6 | **`__enable_irq()` after clocks** | Bootloader jumps with IRQs masked; SysTick / `HAL_Delay` need IRQs on |
+| 7 | **`SCB->VTOR = 0x90000000`** | Set in app `SystemInit` (and again in bootloader before jump) |
+| 8 | **Bootloader jump hygiene** | Clear SysTick/NVIC, `__disable_irq()`, call app **`Reset_Handler`** (not `main`) |
+
+### Correct startup order (app)
+
+```
+Bootloader jump → Reset_Handler → SystemInit (minimal: VTOR + FMC fix, return)
+  → main: MPU_Config() → invalidate+enable I/D cache → HAL_Init()
+  → SystemClock_Config_FromBootloader() → __enable_irq()
+  → MX_GPIO/SPI4/TIM1 (NOT MX_QUADSPI_Init) → app loop
+```
+
+`SystemInit` (in `system_stm32h7xx.c`) must early-return after setting `FMC_Bank1_R->BTCR[0] = 0x000030D2U;` and `SCB->VTOR = QSPI_BASE;` — **never** call `SCB_EnableICache()`/`SCB_EnableDCache()` or reset RCC/PLL there.
+
+`SystemClock_Config_FromBootloader()` keeps the bootloader’s PLL + QSPI clock:
+
+```c
+static void SystemClock_Config_FromBootloader(void)
+{
+  SystemCoreClockUpdate();
+  if (HAL_InitTick(TICK_INT_PRIORITY) != HAL_OK) { Error_Handler(); }
+}
+```
+
+### MPU — identical in bootloader and app
+
+Per `QSPI_mpu_compare.html`, both projects use the **same 2-region MPU** over the QSPI window:
+
+| Region | Base | Size | Execute | Cache |
+|--------|------|------|---------|-------|
+| 0 | `0x90000000` | 8 MB | **No (XN)** | Cacheable + bufferable |
+| 1 | `0x90000000` | 1 MB | **Yes** (overlay) | Inherited |
+
+- Base `0x90000000`, region 0 (8 MB, non-exec), and the cacheable/bufferable attributes **must match** between bootloader and app.
+- Region 1 (1 MB exec overlay) is the known-stable size; **grow it if the app image exceeds 1 MB**.
+
+### Bootloader jump hygiene (this project, `qspi_app_jump_to_application`)
+
+- `__disable_irq()`; stop SysTick and clear pending SysTick/PendSV; disable/clear NVIC (`ICER`/`ICPR`).
+- Deinit **only** bootloader-owned peripherals (UART/SPI/TIM/GPIO). **Do not** deinit QSPI and **do not** reset RCC.
+- Set `SCB->VTOR = 0x90000000`, load MSP from vector[0], `__DSB()`/`__ISB()`, then branch to the app **`Reset_Handler`**.
+
+### XIP app troubleshooting
+
+| Symptom | Likely cause | Check |
+|---------|--------------|-------|
+| HardFault @ `0x9000xxxx` early | MPU/cache/QSPI init order | MPU before cache; no `MX_QUADSPI_Init()` |
+| LCD “Jump to QSPI app” forever | Full `SystemClock_Config()` in app | Use the `FromBootloader` clock handoff |
+| Red error @ `0x24080000` in IDE | That is the stack top, not code | Ignore; check PC is in `0x9000xxxx` |
+| Works in debug, not on power cycle | Clock or IRQ handoff | `__enable_irq()` + no PLL reset |
+| Paused @ `0x9000xxxx` in debug | Inside `HAL_Delay` | Resume — or IRQs are still off |
 
 ---
 
