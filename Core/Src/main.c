@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "lcd_mcal.h"
+#include "main_lcd_message.h"
 #include "app_shared_ram.h"
 #include "qspi_app_load.h"
 #include "qspi_app_jump.h"
@@ -56,7 +57,7 @@ TIM_HandleTypeDef htim1;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-static char s_uart_rx_buf[8];
+static char s_uart_rx_buf[2];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -93,24 +94,15 @@ int main(void)
   /* MPU Configuration--------------------------------------------------------*/
   MPU_Config();
 
-  /* Enable the CPU Cache */
-
-  // /* Enable I-Cache---------------------------------------------------------*/
-  // SCB_EnableICache();
-
-  // /* Enable D-Cache---------------------------------------------------------*/
-  // SCB_EnableDCache();
-
-  /* MCU Configuration--------------------------------------------------------*/
+  /* Enable I/D cache before HAL_Init (H750_BootFromExtFlash order). */
+  SCB_EnableICache();
+  SCB_EnableDCache();
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-  SCB_EnableICache();
 
-  /* Enable D-Cache---------------------------------------------------------*/
-  SCB_EnableDCache();
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -128,36 +120,45 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  lcd_stm32h7_init();
-  lcd_stm32h7_backlight(100);
-  lcd_stm32h7_clear();
-  lcd_stm32h7_color(BLK, GRE);
-  lcd_stm32h7_message("Saptashri Secure\nXIP Bootloader\n");
-  HAL_Delay(1200U);
-  lcd_stm32h7_breathout();
-  
+  main_bootloader_msg();
 
-  lcd_stm32h7_clear();
-  lcd_stm32h7_color(BLK, BLE);
-
-  /* P0-1: Reset external flash and verify Winbond ID before mmap / jump. */
+  /* P0-3: BKPSRAM flag is undefined after cold power-on unless 0 or 1. */
+  app_load_flag_sanitize();
+  uart_recv_string(s_uart_rx_buf, 2);
+  /* P0-1 / P0-2: Reset external flash, ID check, Quad Enable. */
   if (QSPI_Flash_Init(&hqspi) != QSPI_FLASH_OK)
   {
     lcd_stm32h7_message("QSPI init fail\n");
   }
+  /* P0-4: Flag 1 — UART program session only (ends with system reset). */
+  
+  else if (s_uart_rx_buf[0] == 'P')
+  {
+    qspi_new_app_load();
+  }
   else if (app_load_is_disabled())
   {
-    if (QSPI_Flash_EnableMemoryMappedMode(&hqspi) == QSPI_FLASH_OK)
+    /* P0-5: Validate app vectors in indirect mode before mmap / jump. */
+    if (!qspi_app_is_valid_at_flash(&hqspi, QSPI_APP_JUMP_FLASH_OFFSET))
+    {
+      lcd_stm32h7_message("No valid app\n");
+    }
+    else if (QSPI_Flash_EnableMemoryMappedMode(&hqspi) == QSPI_FLASH_OK)
     {
       lcd_stm32h7_message("Jump to QSPI app\n");
       lcd_stm32h7_breathin();
 
-      SCB_CleanInvalidateDCache();  /* Push dirty data to memory */
-        SCB_InvalidateICache();       /* Remove bootloader instructions from cache */
-        SCB_DisableDCache();          /* Disable D-Cache for clean app start */
-        SCB_DisableICache(); 
-        
-      (void)qspi_app_jump_to_application(0x90000000UL);
+      SCB_DisableDCache();          /* H750_BootFromExtFlash: app re-enables cache */
+      SCB_DisableICache();
+
+      (void)qspi_app_jump_to_application(QSPI_APP_JUMP_XIP_BASE);
+      /* Jump failed or returned: leave mmap off before idle loop. */
+      (void)QSPI_Flash_DisableMemoryMappedMode(&hqspi);
+    }
+    else
+    {
+      /* P0-7: Valid vectors but memory-mapped mode could not start. */
+      lcd_stm32h7_message("Mmap fail\n");
     }
   }
   /* USER CODE END 2 */
@@ -171,8 +172,8 @@ int main(void)
   while (1)
   {
     lcd_stm32h7_message("QSPI Bootloader\n");
-    uart_recv_string(s_uart_rx_buf, sizeof(s_uart_rx_buf));
-    if (strcmp(s_uart_rx_buf, "SP") == 0)
+    uart_recv_string(s_uart_rx_buf, 2);
+    if (s_uart_rx_buf[0] == 'P' )
     {
       app_load_enable();
       qspi_new_app_load();
@@ -216,10 +217,10 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 5;
-  RCC_OscInitStruct.PLL.PLLN = 160;
+  RCC_OscInitStruct.PLL.PLLM = 2;
+  RCC_OscInitStruct.PLL.PLLN = 64;
   RCC_OscInitStruct.PLL.PLLP = 2;
-  RCC_OscInitStruct.PLL.PLLQ = 4;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
   RCC_OscInitStruct.PLL.PLLR = 2;
   RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_3;
   RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
@@ -242,7 +243,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
   RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -265,12 +266,12 @@ static void MX_QUADSPI_Init(void)
   /* USER CODE END QUADSPI_Init 1 */
   /* QUADSPI parameter configuration*/
   hqspi.Instance = QUADSPI;
-  hqspi.Init.ClockPrescaler = 2-1;
-  hqspi.Init.FifoThreshold = 32;
+  hqspi.Init.ClockPrescaler = 1;
+  hqspi.Init.FifoThreshold = 4;
   hqspi.Init.SampleShifting = QSPI_SAMPLE_SHIFTING_HALFCYCLE;
-  hqspi.Init.FlashSize = 23-1;
-  hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_8_CYCLE;
-  hqspi.Init.ClockMode = QSPI_CLOCK_MODE_3;
+  hqspi.Init.FlashSize = 22;
+  hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_1_CYCLE;
+  hqspi.Init.ClockMode = QSPI_CLOCK_MODE_0;
   hqspi.Init.FlashID = QSPI_FLASH_ID_1;
   hqspi.Init.DualFlash = QSPI_DUALFLASH_DISABLE;
   if (HAL_QSPI_Init(&hqspi) != HAL_OK)
@@ -500,28 +501,24 @@ void MPU_Config(void)
   */
   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
   MPU_InitStruct.Number = MPU_REGION_NUMBER0;
-  MPU_InitStruct.BaseAddress = 0x0;
-  MPU_InitStruct.Size = MPU_REGION_SIZE_4GB;
-  MPU_InitStruct.SubRegionDisable = 0x87;
+  MPU_InitStruct.BaseAddress = 0x90000000;
+  MPU_InitStruct.Size = MPU_REGION_SIZE_8MB;
+  MPU_InitStruct.SubRegionDisable = 0;
   MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL0;
-  MPU_InitStruct.AccessPermission = MPU_REGION_NO_ACCESS;
+  MPU_InitStruct.AccessPermission = MPU_REGION_FULL_ACCESS;
   MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_DISABLE;
-  MPU_InitStruct.IsShareable = MPU_ACCESS_SHAREABLE;
-  MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
-  MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
+  MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
+  MPU_InitStruct.IsCacheable = MPU_ACCESS_CACHEABLE;
+  MPU_InitStruct.IsBufferable = MPU_ACCESS_BUFFERABLE;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
 
   /** Initializes and configures the Region and the memory to be protected
   */
   MPU_InitStruct.Number = MPU_REGION_NUMBER1;
-  MPU_InitStruct.BaseAddress = 0x90000000;
-  MPU_InitStruct.Size = MPU_REGION_SIZE_8MB;
+  MPU_InitStruct.Size = MPU_REGION_SIZE_1MB;
   MPU_InitStruct.SubRegionDisable = 0x0;
-  MPU_InitStruct.AccessPermission = MPU_REGION_FULL_ACCESS;
   MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_ENABLE;
-  MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
-  MPU_InitStruct.IsCacheable = MPU_ACCESS_CACHEABLE;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
   /* Enables the MPU */
