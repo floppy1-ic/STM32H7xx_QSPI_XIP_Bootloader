@@ -12,8 +12,9 @@ Protocol (must match qspi_app_load.c):
 
 Examples:
   python tools/saptashri_flash.py
-  python tools/saptashri_flash.py -p COM5 app.bin
-  python tools/saptashri_flash.py info app.hex
+  python tools/saptashri_flash.py -p COM3 app.bin
+  python tools/saptashri_flash.py -p COM3 -y app.hex
+  python tools/saptashri_flash.py --info app.hex
 """
 
 from __future__ import annotations
