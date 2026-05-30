@@ -15,10 +15,12 @@ pip install -r tools/requirements.txt
 
 | Step | Host | Bootloader |
 |------|------|------------|
-| 1 | `SP` every **50 ms** for up to **5 s** | Idle: detect `SP`, enter load path |
-| 2 | Wait | **`true`** = mmap off OK (MCU resets); **`false`** = failed |
-| 3 | ≤256 B chunk | Write @ 0x0, **ACK** per chunk |
-| 4 | — | mmap on, flag 0, **reset** (firmware TBD) |
+| 1 | `P` every **50 ms** for up to **10 s** | Idle: detect `P`, enter load path |
+| 2 | **`S` + 4-byte LE size** | **`K`** / **`N`** |
+| 3 | Wait **`EC`** | Erase **ceil(size/4K)+1** sectors @ 0x0 |
+| 4 | Wait **`WE`** | Ready for data |
+| 5 | ≤256 B chunks | Write @ 0x0, **Y** / **N** per chunk |
+| 6 | — | mmap on, flag 0, **reset** |
 
 No ST-LINK required for application updates.
 
