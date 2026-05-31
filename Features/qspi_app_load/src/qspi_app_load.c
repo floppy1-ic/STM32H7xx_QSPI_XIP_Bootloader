@@ -44,11 +44,18 @@ extern UART_HandleTypeDef huart1;
 #define FLASH_ACK_CHUNK_OK            ('Y')
 #define FLASH_NACK                    ('N')
 
+/**
+  * @brief  Erase a single 4 KB QSPI flash sector at the given byte offset.
+  */
 bool qspi_app_erase_flash_sector(uint32_t sector_byte_offset)
 {
   return (QSPI_Flash_EraseSector(&hqspi, sector_byte_offset) == QSPI_FLASH_OK);
 }
 
+/**
+  * @brief  Program @p len bytes from @p data into QSPI flash at @p byte_offset.
+  * @retval true on success; false on NULL/zero-length input or write error.
+  */
 bool qspi_app_write_flash(uint32_t byte_offset, const uint8_t *data, uint32_t len)
 {
   if (data == NULL || len == 0U)
@@ -59,6 +66,10 @@ bool qspi_app_write_flash(uint32_t byte_offset, const uint8_t *data, uint32_t le
   return (QSPI_Flash_Write(&hqspi, byte_offset, data, len) == QSPI_FLASH_OK);
 }
 
+/**
+  * @brief  Block until USART1 returns to the READY state (TX drained).
+  * @retval true once ready; false if it does not settle within 1 s.
+  */
 static bool flash_uart_wait_tx_done(void)
 {
   uint32_t tick = HAL_GetTick();
@@ -74,6 +85,9 @@ static bool flash_uart_wait_tx_done(void)
   return true;
 }
 
+/**
+  * @brief  Send a single ACK/NACK byte to the host and wait for TX to complete.
+  */
 static bool flash_uart_send_ack(char ack)
 {
   if (uart_send_char(ack) != HAL_OK)
@@ -84,6 +98,9 @@ static bool flash_uart_send_ack(char ack)
   return flash_uart_wait_tx_done();
 }
 
+/**
+  * @brief  Receive one byte from USART1 with a per-byte timeout.
+  */
 static bool flash_uart_recv_byte(uint8_t *byte, uint32_t timeout_ms)
 {
   return (HAL_UART_Receive(&huart1, byte, 1U, timeout_ms) == HAL_OK);
@@ -103,6 +120,10 @@ static void flash_uart_drain_rx(void)
   }
 }
 
+/**
+  * @brief  Receive exactly @p len bytes: long timeout for the first byte,
+  *         short per-byte timeout thereafter. Fails if any byte times out.
+  */
 static bool flash_uart_recv_exact(uint8_t *buf, uint32_t len)
 {
   uint32_t i;
@@ -121,6 +142,10 @@ static bool flash_uart_recv_exact(uint8_t *buf, uint32_t len)
   return true;
 }
 
+/**
+  * @brief  Wait for the 'S' sync byte, then read the 4-byte little-endian image
+  *         size. Rejects zero or sizes larger than the W25Q64 capacity.
+  */
 static bool flash_receive_image_size(uint32_t *image_size)
 {
   uint8_t sync = 0U;
@@ -176,6 +201,10 @@ static uint32_t flash_sectors_to_erase(uint32_t image_size)
   return sectors_for_image + FLASH_ERASE_EXTRA_SECTORS;
 }
 
+/**
+  * @brief  Erase the sectors covering @p image_size (+1 margin) from offset 0,
+  *         then send "EC\r\n". NACKs and aborts on any sector erase failure.
+  */
 static bool flash_cleaning(uint32_t image_size)
 {
   uint32_t sector_count = flash_sectors_to_erase(image_size);
@@ -188,7 +217,7 @@ static bool flash_cleaning(uint32_t image_size)
     return false;
   }
 
-  lcd_stm32h7_message("Erasing app...\n");
+  lcd_stm32h7_message("Erasing Flash...\n");
 
   for (offset = 0U; offset < erase_bytes; offset += W25Q64_SECTOR_SIZE)
   {
@@ -205,6 +234,10 @@ static bool flash_cleaning(uint32_t image_size)
   return true;
 }
 
+/**
+  * @brief  Send "WE\r\n", then receive the image in <=256-byte chunks, writing
+  *         each to QSPI and ACKing 'Y' per chunk ('N' + abort on any failure).
+  */
 static bool flash_writing(uint32_t image_size)
 {
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3,0);
@@ -272,6 +305,11 @@ static void flash_load_session_complete(void)
   NVIC_SystemReset();
 }
 
+/**
+  * @brief  Run one UART app-load session: mmap off -> size handshake -> erase ->
+  *         program. On success clears the load flag, re-enables mmap and resets;
+  *         on any failure keeps flag 1 and returns to the bootloader idle loop.
+  */
 void qspi_new_app_load(void)
 {
   uint32_t image_size = 0U;
