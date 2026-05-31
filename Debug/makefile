@@ -73,8 +73,8 @@ all: main-build
 main-build: STM32H7xx_QSPI.elf secondary-outputs
 
 # Tool invocations
-STM32H7xx_QSPI.elf STM32H7xx_QSPI.map: $(OBJS) $(USER_OBJS) C:\Users\91637\Downloads\STM32_SESSIONS\STM32_REPO\STM32H7xx_qspi_flash\STM32H750VBTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "STM32H7xx_QSPI.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\Users\91637\Downloads\STM32_SESSIONS\STM32_REPO\STM32H7xx_qspi_flash\STM32H750VBTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="STM32H7xx_QSPI.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+STM32H7xx_QSPI.elf STM32H7xx_QSPI.map: $(OBJS) $(USER_OBJS) C:\Users\91637\Downloads\STM32_SESSIONS\STM32_REPO\STM32H7xx_QSPI_XIP_Bootloader\STM32H750VBTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "STM32H7xx_QSPI.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\Users\91637\Downloads\STM32_SESSIONS\STM32_REPO\STM32H7xx_QSPI_XIP_Bootloader\STM32H750VBTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="STM32H7xx_QSPI.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
