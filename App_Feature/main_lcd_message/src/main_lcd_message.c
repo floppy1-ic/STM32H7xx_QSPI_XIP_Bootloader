@@ -20,7 +20,7 @@ void main_bootloader_msg(void)
   lcd_stm32h7_clear();
   lcd_stm32h7_color(BLK, GRE);
   lcd_stm32h7_message("Saptashri Secure\nXIP Bootloader\n");
-  HAL_Delay(1200U);
+  HAL_Delay(900U);
   lcd_stm32h7_breathout();
   lcd_stm32h7_clear();
   lcd_stm32h7_color(BLK, BLE);
