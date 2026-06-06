@@ -1,5 +1,9 @@
 # New Header File Instruction
 
+When a new **module folder** (`Inc/` + `Src/`) is added, also follow
+`build_include_path_instruction.md` so `Debug/**/subdir.mk` and `sources.mk`
+get the correct `-I` paths.
+
 When a new header (`.h`) file is created, it MUST start with the standard file
 banner, then the file name, then the rest of the header guard / include block,
 following the existing style in `Peripherals/MPU6050/Inc/mpu6050.h`.
