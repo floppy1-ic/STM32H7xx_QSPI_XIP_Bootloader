@@ -1,4 +1,4 @@
-# Saptashri Secure XIP Bootloader — STM32H750VBTx
+# Saptashri Secure XIP Bootloader STM32H750VBTx
 
 Bootloader in **128 KB internal flash** (`0x08000000`). Application image on external **Winbond W25Q64** (8 MB), executed from **XIP** `0x90000000` after memory-mapped mode.
 
